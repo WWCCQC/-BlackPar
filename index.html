@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>แสดงข้อมูล Google Sheet</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #bbb; padding: 8px; }
+    </style>
+</head>
+<body>
+    <h2>ข้อมูลจาก Google Sheet</h2>
+    <div id="table-container">Loading...</div>
+    <script>
+    // ดึงข้อมูล JSON จาก Flask API
+    fetch('http://localhost:5000/sheet-data')
+        .then(res => res.json())
+        .then(json => {
+            // ไปยังตำแหน่ง rowData
+            const rowData = json.sheets[0].data[0].rowData;
+            let html = "<table>";
+            rowData.forEach((row, rIdx) => {
+                if (!row.values) return;
+                html += "<tr>";
+                row.values.forEach(cell => {
+                    let value = cell.formattedValue || "";
+                    let style = "";
+
+                    // ถ้าค่าเป็น "0" หรือ 0 → background: ดำ, font: ดำ
+                    if (value === "0" || value === 0) {
+                        style += "background: #000; color: #000;";
+                    } else {
+                        // กรณีปกติ ใส่สีตาม Google Sheets API
+                        if (cell.effectiveFormat && cell.effectiveFormat.backgroundColor) {
+                            let c = cell.effectiveFormat.backgroundColor;
+                            if (c.red !== undefined && c.green !== undefined && c.blue !== undefined) {
+                                let r = Math.round((c.red ?? 1) * 255);
+                                let g = Math.round((c.green ?? 1) * 255);
+                                let b = Math.round((c.blue ?? 1) * 255);
+                                style += `background: rgb(${r},${g},${b});`;
+                            }
+                        }
+                        // ตัวหนา
+                        if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.bold) {
+                            style += "font-weight: bold;";
+                        }
+                        // ตัวเอียง
+                        if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.italic) {
+                            style += "font-style: italic;";
+                        }
+                        // สี font
+                        if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.foregroundColor) {
+                            let c = cell.effectiveFormat.textFormat.foregroundColor;
+                            if (c.red !== undefined && c.green !== undefined && c.blue !== undefined) {
+                                let r = Math.round(c.red * 255);
+                                let g = Math.round(c.green * 255);
+                                let b = Math.round(c.blue * 255);
+                                style += `color: rgb(${r},${g},${b});`;
+                            }
+                        }
+                    }
+                    html += `<td style="${style}">${value}</td>`;
+                });
+                html += "</tr>";
+            });
+            html += "</table>";
+            document.getElementById('table-container').innerHTML = html;
+        })
+        .catch(err => {
+            document.getElementById('table-container').innerHTML = "โหลดข้อมูลไม่ได้ : " + err;
+        });
+    </script>
+</body>
+</html>
