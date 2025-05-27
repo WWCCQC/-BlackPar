@@ -8,7 +8,7 @@ CORS(app)                       # และเพิ่มบรรทัดน�
 
 @app.route('/sheet-data')
 def sheet_data():
-    SERVICE_ACCOUNT_FILE = 'credentials/service-account.json'
+    SERVICE_ACCOUNT_FILE = '/etc/secrets/service-account.json'
     SPREADSHEET_ID = '1zNBBwHesBSFBNejaH4uTGqD90I4snSMxTcxODSQdGiE'
     RANGE = 'Remain Par By Group Code!A1:U405'
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
