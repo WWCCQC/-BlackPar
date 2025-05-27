@@ -1,10 +1,15 @@
-from flask import Flask, jsonify
-from flask_cors import CORS      # เพิ่มบรรทัดนี้
+from flask import Flask, jsonify, send_file   # เพิ่ม send_file
+from flask_cors import CORS
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
-CORS(app)                       # และเพิ่มบรรทัดนี้
+CORS(app)
+
+@app.route('/')
+def home():
+    # ส่ง index.html ที่อยู่ใน root directory
+    return send_file('index.html')
 
 @app.route('/sheet-data')
 def sheet_data():
