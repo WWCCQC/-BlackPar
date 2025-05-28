@@ -2,29 +2,333 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>แสดงข้อมูล Google Sheet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Compare Remain</title>
     <style>
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #bbb; padding: 8px; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Sarabun', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        /* Header Styles */
+        .header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+        
+        /* Navbar Styles */
+        .navbar {
+            background-color: #34495e;
+            padding: 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .navbar ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .navbar li {
+            margin: 0;
+        }
+        
+        .navbar a {
+            display: block;
+            color: white;
+            text-decoration: none;
+            padding: 15px 20px;
+            transition: background-color 0.3s;
+            font-size: 16px;
+        }
+        
+        .navbar a:hover {
+            background-color: #2c3e50;
+        }
+        
+        .navbar a.active {
+            background-color: #3498db;
+        }
+        
+        /* Container Styles */
+        .container {
+            width: 100%;
+            margin: 0;
+            padding: 5px;
+        }
+        
+        .content-section {
+            background-color: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 5px;
+            height: calc(100vh - 160px);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .content-section h2 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        
+        /* Table Styles */
+        #table-container {
+            overflow: hidden;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #table-container > div {
+            height: 100%;
+            overflow: auto;
+        }
+        
+        table { 
+            border-collapse: collapse; 
+            width: 100%;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        th, td { 
+            border: 1px solid #dee2e6;
+            padding: 4px 8px;
+            text-align: left;
+            font-size: 13px;
+            line-height: 1.4;
+            vertical-align: middle;
+        }
+        
+        th {
+            background-color: #2c3e50;
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Zebra striping for better readability */
+        tr:nth-child(even) td {
+            background-color: #f8f9fa;
+        }
+        
+        /* Hover effect */
+        tr:hover td {
+            background-color: #e9ecef !important;
+        }
+        
+        /* First few columns styling */
+        td:nth-child(1), td:nth-child(2), td:nth-child(3), td:nth-child(4) {
+            font-weight: 500;
+            background-color: #f1f3f5;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+        }
+        
+        td:nth-child(1) { left: 0; }
+        td:nth-child(2) { left: 100px; }
+        td:nth-child(3) { left: 200px; }
+        td:nth-child(4) { left: 300px; }
+        
+        /* Status column styling */
+        td:nth-child(5), td:nth-child(6) {
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        /* Number columns */
+        td:not(:nth-child(-n+6)) {
+            text-align: center;
+            min-width: 40px;
+        }
+        
+        /* Responsive adjustments */
+        @media (min-width: 1400px) {
+            th, td {
+                font-size: 14px;
+                padding: 6px 10px;
+            }
+            th {
+                font-size: 13px;
+            }
+        }
+        
+        @media (max-width: 1200px) {
+            th, td {
+                font-size: 12px;
+                padding: 3px 6px;
+            }
+            th {
+                font-size: 11px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            th, td {
+                font-size: 10px;
+                padding: 2px 4px;
+            }
+            th {
+                font-size: 10px;
+            }
+        }
+        
+        /* Loading Styles */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+        
+        /* Error Styles */
+        .error {
+            color: #e74c3c;
+            padding: 20px;
+            background-color: #ffe6e6;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        /* Hidden sections */
+        .section {
+            display: none;
+        }
+        
+        .section.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
-    <h2>ข้อมูลจาก Google Sheet</h2>
-    <div id="table-container">Loading...</div>
+    <!-- Header -->
+    <div class="header">
+        <h1>Dashboard Compare Remain</h1>
+    </div>
+    
+    <!-- Navbar -->
+    <nav class="navbar">
+        <ul>
+            <li><a href="#home" onclick="showSection('home')">หน้าหลัก</a></li>
+            <li><a href="#remain-group" onclick="showSection('remain-group')" class="active">Remain Par By Group Code</a></li>
+            <li><a href="#remain-team" onclick="showSection('remain-team')">Remain Par By Group-Team</a></li>
+            <li><a href="#technician-register" onclick="showSection('technician-register')">ข้อมูลช่างที่ขึ้นทะเบียน</a></li>
+            <li><a href="#training-status" onclick="showSection('training-status')">สถานะการอบรมช่าง</a></li>
+        </ul>
+    </nav>
+    
+    <!-- Main Container -->
+    <div class="container">
+        <!-- หน้าหลัก -->
+        <div id="home" class="section">
+            <div class="content-section">
+                <h2>ยินดีต้อนรับสู่ Dashboard Compare Remain</h2>
+                <p>เลือกเมนูด้านบนเพื่อดูข้อมูลในแต่ละหมวดหมู่</p>
+            </div>
+        </div>
+        
+        <!-- Remain Par By Group Code -->
+        <div id="remain-group" class="section active">
+            <div class="content-section">
+                <h2>Remain Par By Group Code - ข้อมูลจาก Google Sheet</h2>
+                <div id="table-container" class="loading">กำลังโหลดข้อมูล...</div>
+            </div>
+        </div>
+        
+        <!-- Remain Par By Group-Team -->
+        <div id="remain-team" class="section">
+            <div class="content-section">
+                <h2>Remain Par By Group-Team</h2>
+                <p>ข้อมูลจะแสดงที่นี่</p>
+            </div>
+        </div>
+        
+        <!-- ข้อมูลช่างที่ขึ้นทะเบียน -->
+        <div id="technician-register" class="section">
+            <div class="content-section">
+                <h2>ข้อมูลช่างที่ขึ้นทะเบียน</h2>
+                <p>ข้อมูลจะแสดงที่นี่</p>
+            </div>
+        </div>
+        
+        <!-- สถานะการอบรมช่าง -->
+        <div id="training-status" class="section">
+            <div class="content-section">
+                <h2>สถานะการอบรมช่าง</h2>
+                <p>ข้อมูลจะแสดงที่นี่</p>
+            </div>
+        </div>
+    </div>
+    
     <script>
+    // ฟังก์ชันสำหรับแสดง/ซ่อน section
+    function showSection(sectionId) {
+        // ซ่อนทุก section
+        const sections = document.querySelectorAll('.section');
+        sections.forEach(section => {
+            section.classList.remove('active');
+        });
+        
+        // แสดง section ที่เลือก
+        document.getElementById(sectionId).classList.add('active');
+        
+        // อัพเดท active class ใน navbar
+        const navLinks = document.querySelectorAll('.navbar a');
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === '#' + sectionId) {
+                link.classList.add('active');
+            }
+        });
+    }
+    
     // ดึงข้อมูล JSON จาก Flask API
     fetch('https://blackpar.onrender.com/sheet-data')
         .then(res => res.json())
         .then(json => {
             // ไปยังตำแหน่ง rowData
             const rowData = json.sheets[0].data[0].rowData;
-            let html = "<table>";
+            let html = '<div style="height: 100%; overflow: auto;"><table>';
+            
             rowData.forEach((row, rIdx) => {
                 if (!row.values) return;
                 html += "<tr>";
-                row.values.forEach(cell => {
+                row.values.forEach((cell, cIdx) => {
                     let value = cell.formattedValue || "";
                     let style = "";
+                    let tag = rIdx === 0 ? 'th' : 'td';
+                    
+                    // จัดการค่าว่าง
+                    if (value === "") {
+                        value = "-";
+                    }
 
                     // ถ้าค่าเป็น "0" หรือ 0 → background: ดำ, font: ดำ
                     if (value === "0" || value === 0) {
@@ -37,17 +341,26 @@
                                 let r = Math.round((c.red ?? 1) * 255);
                                 let g = Math.round((c.green ?? 1) * 255);
                                 let b = Math.round((c.blue ?? 1) * 255);
-                                style += `background: rgb(${r},${g},${b});`;
+                                
+                                // ถ้าเป็นสีเข้ม ให้ตัวอักษรเป็นสีขาว
+                                if ((r + g + b) / 3 < 128) {
+                                    style += `background: rgb(${r},${g},${b}); color: white;`;
+                                } else {
+                                    style += `background: rgb(${r},${g},${b});`;
+                                }
                             }
                         }
+                        
                         // ตัวหนา
                         if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.bold) {
                             style += "font-weight: bold;";
                         }
+                        
                         // ตัวเอียง
                         if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.italic) {
                             style += "font-style: italic;";
                         }
+                        
                         // สี font
                         if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.foregroundColor) {
                             let c = cell.effectiveFormat.textFormat.foregroundColor;
@@ -58,16 +371,51 @@
                                 style += `color: rgb(${r},${g},${b});`;
                             }
                         }
+                        
+                        // เพิ่มสีพิเศษสำหรับ Status
+                        if (cIdx === 5 && tag === 'td') { // Status Today column
+                            if (value.toLowerCase() === 'available') {
+                                style += "background: #28a745; color: white; font-weight: bold;";
+                            } else if (value.toLowerCase() === 'full') {
+                                style += "background: #dc3545; color: white; font-weight: bold;";
+                            }
+                        }
+                        
+                        // จัดรูปแบบตัวเลข
+                        if (!isNaN(value) && value !== "" && value !== "-" && cIdx > 5) {
+                            value = parseInt(value).toLocaleString();
+                        }
                     }
-                    html += `<td style="${style}">${value}</td>`;
+                    
+                    // เพิ่ม class สำหรับคอลัมน์แรกๆ
+                    let className = "";
+                    if (cIdx < 4) {
+                        className = "sticky-column";
+                    }
+                    
+                    html += `<${tag} class="${className}" style="${style}" title="${cell.formattedValue || ''}">${value}</${tag}>`;
                 });
                 html += "</tr>";
             });
-            html += "</table>";
+            html += "</table></div>";
             document.getElementById('table-container').innerHTML = html;
+            
+            // เพิ่มการ highlight แถวเมื่อ hover
+            const table = document.querySelector('#table-container table');
+            if (table) {
+                const rows = table.querySelectorAll('tr');
+                rows.forEach(row => {
+                    row.addEventListener('mouseenter', function() {
+                        this.style.backgroundColor = '#e3f2fd';
+                    });
+                    row.addEventListener('mouseleave', function() {
+                        this.style.backgroundColor = '';
+                    });
+                });
+            }
         })
         .catch(err => {
-            document.getElementById('table-container').innerHTML = "โหลดข้อมูลไม่ได้ : " + err;
+            document.getElementById('table-container').innerHTML = '<div class="error">โหลดข้อมูลไม่ได้: ' + err + '</div>';
         });
     </script>
 </body>
