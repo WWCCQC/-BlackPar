@@ -770,16 +770,20 @@
             const processedData = allData.slice(1).filter(row => {
                 if (row.length < Math.max(...REQUIRED_COLUMNS)) return false;
                 
-                const provider = row[1] || ''; // Provider (คอลัมน์ B)
-                const typeOfWork = row[5] || ''; // Type of work (คอลัมน์ F)
-                const typeOfProviderGroup = row[4] || ''; // Type of Provider Group (คอลัมน์ E)
-                const group = row[8] || ''; // Group (คอลัมน์ I)
+                const provider = (row[1] || '').trim(); // Provider (คอลัมน์ B)
+                const typeOfWork = (row[5] || '').trim(); // Type of work (คอลัมน์ F)
+                const typeOfProviderGroup = (row[4] || '').trim().toLowerCase(); // Type of Provider Group (คอลัมน์ E)
+                const group = (row[8] || '').trim(); // Group (คอลัมน์ I)
                 
                 // เงื่อนไขการกรอง
                 const validProvider = ['WW-Provider', 'เถ้าแก่เทค', 'True Tech'].includes(provider);
                 const validGroup = group !== 'TVG';
                 const validTypeOfWork = !['MPLS', 'Other'].includes(typeOfWork);
-                const validTypeOfProviderGroup = !typeOfProviderGroup.includes('Audit(QC)') && !typeOfProviderGroup.includes('Audit') && !typeOfProviderGroup.includes('QC');
+                
+                // กรอง Audit, QC แบบละเอียด
+                const hasAudit = typeOfProviderGroup.includes('audit');
+                const hasQC = typeOfProviderGroup.includes('qc') || typeOfProviderGroup.includes('q.c');
+                const validTypeOfProviderGroup = !hasAudit && !hasQC;
                 
                 return validProvider && validGroup && validTypeOfWork && validTypeOfProviderGroup;
             }).map(row => {
@@ -877,7 +881,10 @@
     // ฟังก์ชันสร้างตัวเลือกใน dropdown
     function populateFilters(data) {
         const providers = [...new Set(data.map(row => row['Provider']))].sort();
-        const types = [...new Set(data.map(row => row['Type of Provider Group']))].sort();
+        const types = [...new Set(data.map(row => row['Type of Provider Group']))].filter(type => {
+            const lowerType = type.toLowerCase();
+            return !lowerType.includes('audit') && !lowerType.includes('qc') && !lowerType.includes('q.c');
+        }).sort();
         const rsms = [...new Set(data.map(row => row['RSM']))].sort();
         const provinces = [...new Set(data.map(row => row['Province']))].sort();
         
@@ -919,6 +926,12 @@
         const provinceFilter = document.getElementById('province-filter').value;
         
         filteredData = technicianData.filter(row => {
+            // กรอง Audit/QC ก่อน
+            const typeOfProviderGroup = row['Type of Provider Group'].toLowerCase();
+            const hasAudit = typeOfProviderGroup.includes('audit');
+            const hasQC = typeOfProviderGroup.includes('qc') || typeOfProviderGroup.includes('q.c');
+            if (hasAudit || hasQC) return false;
+            
             const matchSearch = !searchTerm || Object.values(row).some(value => 
                 value.toString().toLowerCase().includes(searchTerm)
             );
@@ -1028,23 +1041,51 @@
     
     // ฟังก์ชันดาวน์โหลด Excel
     function downloadExcel() {
-        // สร้าง CSV content
-        let csvContent = COLUMN_NAMES.join(',') + '\n';
+        // สร้าง workbook และ worksheet
+        const wb = XLSX.utils.book_new();
+        
+        // เตรียมข้อมูลสำหรับ Excel
+        const excelData = [COLUMN_NAMES]; // Header row
+        
+        // เพิ่มข้อมูลแต่ละแถว
         filteredData.forEach(row => {
-            const values = COLUMN_NAMES.map(column => {
-                const value = row[column] || '';
-                // ใส่ quotes ถ้ามี comma
-                return value.includes(',') ? `"${value}"` : value;
-            });
-            csvContent += values.join(',') + '\n';
+            const rowData = COLUMN_NAMES.map(column => row[column] || '');
+            excelData.push(rowData);
         });
         
-        // สร้าง blob และดาวน์โหลด
-        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'ข้อมูลช่างที่ขึ้นทะเบียน.csv';
-        link.click();
+        // สร้าง worksheet จากข้อมูล
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        // กำหนดความกว้างของคอลัมน์
+        const colWidths = COLUMN_NAMES.map(col => ({
+            wch: Math.max(col.length, 15) // ความกว้างขั้นต่ำ 15 ตัวอักษร
+        }));
+        ws['!cols'] = colWidths;
+        
+        // จัดรูปแบบ header
+        const headerRange = XLSX.utils.decode_range(ws['!ref']);
+        for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+            if (!ws[cellAddress]) continue;
+            
+            // กำหนดรูปแบบ header
+            ws[cellAddress].s = {
+                font: { bold: true, color: { rgb: "FFFFFF" } },
+                fill: { fgColor: { rgb: "2C3E50" } },
+                alignment: { horizontal: "center", vertical: "center" }
+            };
+        }
+        
+        // เพิ่ม worksheet ลง workbook
+        XLSX.utils.book_append_sheet(wb, ws, "ข้อมูลช่างที่ขึ้นทะเบียน");
+        
+        // สร้างชื่อไฟล์พร้อมวันที่
+        const today = new Date();
+        const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+        const fileName = `ข้อมูลช่างที่ขึ้นทะเบียน_${dateStr}.xlsx`;
+        
+        // ดาวน์โหลดไฟล์ Excel
+        XLSX.writeFile(wb, fileName);
     }
     
     // ฟังก์ชันโหลดข้อมูลช่าง
@@ -1053,6 +1094,18 @@
             document.getElementById('technician-table-container').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
             
             technicianData = await fetchTechnicianData(forceRefresh);
+            
+            // Debug: ตรวจสอบข้อมูลที่มี Audit
+            const auditData = technicianData.filter(row => {
+                const type = row['Type of Provider Group'].toLowerCase();
+                return type.includes('audit') || type.includes('qc');
+            });
+            if (auditData.length > 0) {
+                console.log('พบข้อมูล Audit/QC ที่ยังผ่านการกรอง:', auditData);
+            } else {
+                console.log('กรองข้อมูล Audit/QC สำเร็จแล้ว');
+            }
+            
             filteredData = [...technicianData];
             
             // อัพเดทสถิติ
@@ -1110,5 +1163,8 @@
     
     <!-- Chart.js สำหรับกราฟ (ถ้าต้องการใช้) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- SheetJS library สำหรับสร้างไฟล์ Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </body>
 </html>
