@@ -324,7 +324,7 @@
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             margin-bottom: 30px;
-            height: 400px;
+            height: 450px;
         }
         
         .chart-container h3 {
@@ -547,6 +547,7 @@
                     <div class="controls-row">
                         <button id="refresh-btn" class="refresh">รีเฟรชข้อมูล</button>
                         <button id="download-btn" class="download">ดาวน์โหลด Excel</button>
+                        <button id="clear-filters-btn" style="background: #95a5a6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">เคลียร์การกรอง</button>
                     </div>
                 </div>
                 
@@ -775,36 +776,42 @@
                 const typeOfProviderGroup = (row[4] || '').trim(); // Type of Provider Group (คอลัมน์ E)
                 const group = (row[8] || '').trim(); // Group (คอลัมน์ I)
                 
-                // Debug: แสดงข้อมูลที่มี Audit
-                if (typeOfProviderGroup.toLowerCase().includes('audit') || typeOfProviderGroup.toLowerCase().includes('qc')) {
-                    console.log('กรองออก - Type of Provider Group:', typeOfProviderGroup);
+                // กรอง Audit/QC อย่างเข้มงวด - ไม่ให้ผ่านเลย
+                if (typeOfProviderGroup.toLowerCase().includes('audit')) {
+                    console.log('❌ กรองออก - มี Audit:', typeOfProviderGroup);
+                    return false;
+                }
+                if (typeOfProviderGroup.toLowerCase().includes('qc')) {
+                    console.log('❌ กรองออก - มี QC:', typeOfProviderGroup);
+                    return false;
                 }
                 
-                // เงื่อนไขการกรอง
+                // เงื่อนไขการกรองอื่นๆ
                 const validProvider = ['WW-Provider', 'เถ้าแก่เทค', 'True Tech'].includes(provider);
                 const validGroup = group !== 'TVG';
                 const validTypeOfWork = !['MPLS', 'Other'].includes(typeOfWork);
                 
-                // กรอง Audit, QC แบบเข้มงวด
-                const typeOfProviderGroupLower = typeOfProviderGroup.toLowerCase();
-                const hasAudit = typeOfProviderGroupLower.includes('audit');
-                const hasQC = typeOfProviderGroupLower.includes('qc') || typeOfProviderGroupLower.includes('q.c');
-                const hasAuditQC = typeOfProviderGroupLower.includes('audit(qc');
-                const validTypeOfProviderGroup = !hasAudit && !hasQC && !hasAuditQC;
-                
-                const isValid = validProvider && validGroup && validTypeOfWork && validTypeOfProviderGroup;
-                
-                // Debug: แสดงผลการกรอง
-                if (!isValid && (hasAudit || hasQC || hasAuditQC)) {
-                    console.log('ถูกกรองออกเนื่องจาก Audit/QC:', {
-                        typeOfProviderGroup: typeOfProviderGroup,
-                        hasAudit: hasAudit,
-                        hasQC: hasQC,
-                        hasAuditQC: hasAuditQC
-                    });
+                if (!validProvider) {
+                    console.log('❌ กรองออก - Provider ไม่ถูกต้อง:', provider);
+                    return false;
+                }
+                if (!validGroup) {
+                    console.log('❌ กรองออก - Group เป็น TVG:', group);
+                    return false;
+                }
+                if (!validTypeOfWork) {
+                    console.log('❌ กรองออก - Type of work ไม่ถูกต้อง:', typeOfWork);
+                    return false;
                 }
                 
-                return isValid;
+                console.log('✅ ข้อมูลผ่านการกรอง:', {
+                    provider: provider,
+                    typeOfProviderGroup: typeOfProviderGroup,
+                    typeOfWork: typeOfWork,
+                    group: group
+                });
+                
+                return true;
             }).map(row => {
                 // เลือกเฉพาะคอลัมน์ที่ต้องการ
                 const selectedData = {};
@@ -847,10 +854,10 @@
         const repairPersonCount = repairData.length;
         
         return {
-            teamCount,
-            personCount,
-            installCount: `${installTeamCount} / ${installPersonCount}`,
-            repairCount: `${repairTeamCount} / ${repairPersonCount}`
+            teamCount: teamCount.toLocaleString(),
+            personCount: personCount.toLocaleString(),
+            installCount: `${installTeamCount.toLocaleString()} / ${installPersonCount.toLocaleString()}`,
+            repairCount: `${repairTeamCount.toLocaleString()} / ${repairPersonCount.toLocaleString()}`
         };
     }
     
@@ -865,43 +872,139 @@
         });
         
         // เรียงลำดับ RSM1-RSM8
-        const sortedRSM = Object.keys(rsmCounts).sort((a, b) => {
-            if (a.startsWith('RSM') && b.startsWith('RSM')) {
-                return parseInt(a.replace('RSM', '')) - parseInt(b.replace('RSM', ''));
+        const rsmLabels = [];
+        const rsmValues = [];
+        
+        // สร้าง RSM1-RSM8 ให้ครบ
+        for (let i = 1; i <= 8; i++) {
+            const rsmPrefix = `RSM${i}`;
+            // หาชื่อจริงที่ขึ้นต้นด้วย RSMx
+            const realRsmName = Object.keys(rsmCounts).find(rsm => rsm.startsWith(rsmPrefix));
+            if (realRsmName) {
+                rsmLabels.push(realRsmName);
+                rsmValues.push(rsmCounts[realRsmName]);
+            } else {
+                rsmLabels.push(rsmPrefix);
+                rsmValues.push(0);
             }
-            return a.localeCompare(b);
+        }
+        
+        // เพิ่ม RSM อื่นๆ ที่ไม่ใช่ RSM1-8
+        Object.keys(rsmCounts).forEach(rsm => {
+            if (!rsm.match(/^RSM[1-8]/)) {
+                rsmLabels.push(rsm);
+                rsmValues.push(rsmCounts[rsm]);
+            }
         });
         
         const canvas = document.getElementById('rsm-chart');
         const ctx = canvas.getContext('2d');
         
-        // เคลียร์ canvas
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
+        // ทำลายกราฟเก่าถ้ามี
+        if (window.rsmChartInstance) {
+            window.rsmChartInstance.destroy();
+        }
         
-        // วาดกราฟแท่ง
-        const maxValue = Math.max(...Object.values(rsmCounts));
-        const barWidth = (canvas.width - 100) / sortedRSM.length;
-        const barMaxHeight = canvas.height - 100;
-        
-        ctx.fillStyle = '#3498db';
-        ctx.font = '14px Arial';
-        
-        sortedRSM.forEach((rsm, index) => {
-            const value = rsmCounts[rsm];
-            const barHeight = (value / maxValue) * barMaxHeight;
-            const x = 50 + index * barWidth;
-            const y = canvas.height - 50 - barHeight;
-            
-            // วาดแท่ง
-            ctx.fillStyle = '#3498db';
-            ctx.fillRect(x + 10, y, barWidth - 20, barHeight);
-            
-            // เขียนค่า
-            ctx.fillStyle = '#2c3e50';
-            ctx.textAlign = 'center';
-            ctx.fillText(value.toString(), x + barWidth/2, y - 10);
-            ctx.fillText(rsm, x + barWidth/2, canvas.height - 30);
+        // สร้างกราฟใหม่ด้วย Chart.js
+        window.rsmChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: rsmLabels,
+                datasets: [{
+                    label: 'จำนวนกองงาน',
+                    data: rsmValues,
+                    backgroundColor: 'rgba(52, 152, 219, 0.8)',
+                    borderColor: 'rgba(52, 152, 219, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        bottom: 50
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: false
+                    },
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            display: true,
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        },
+                        ticks: {
+                            font: {
+                                family: 'Sarabun, Arial, sans-serif',
+                                size: 12
+                            },
+                            stepSize: 50
+                        }
+                    },
+                    x: {
+                        display: true,
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            font: {
+                                family: 'Sarabun, Arial, sans-serif',
+                                size: 10
+                            },
+                            callback: function(value, index, values) {
+                                const label = this.getLabelForValue(value);
+                                // ถ้าข้อความยาวเกิน 15 ตัวอักษร ให้ตัดและใส่ ...
+                                return label.length > 15 ? label.substring(0, 15) + '...' : label;
+                            }
+                        }
+                    }
+                },
+                elements: {
+                    bar: {
+                        borderRadius: 4
+                    }
+                },
+                plugins: {
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        formatter: function(value, context) {
+                            return value > 0 ? value : '';
+                        },
+                        font: {
+                            weight: 'bold',
+                            size: 12
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                afterDatasetsDraw: function(chart) {
+                    const ctx = chart.ctx;
+                    chart.data.datasets.forEach((dataset, i) => {
+                        const meta = chart.getDatasetMeta(i);
+                        meta.data.forEach((bar, index) => {
+                            const value = dataset.data[index];
+                            if (value > 0) {
+                                ctx.fillStyle = '#2c3e50';
+                                ctx.font = 'bold 12px Sarabun, Arial, sans-serif';
+                                ctx.textAlign = 'center';
+                                ctx.fillText(value, bar.x, bar.y - 5);
+                            }
+                        });
+                    });
+                }
+            }]
         });
     }
     
@@ -969,6 +1072,16 @@
             
             return matchSearch && matchProvider && matchType && matchRSM && matchProvince;
         });
+        
+        // อัพเดทการ์ดสถิติตามข้อมูลที่กรองแล้ว
+        const filteredStats = calculateStats(filteredData);
+        document.getElementById('team-count').textContent = filteredStats.teamCount;
+        document.getElementById('person-count').textContent = filteredStats.personCount;
+        document.getElementById('install-count').textContent = filteredStats.installCount;
+        document.getElementById('repair-count').textContent = filteredStats.repairCount;
+        
+        // อัพเดทกราฟตามข้อมูลที่กรองแล้ว
+        setTimeout(() => createRSMChart(filteredData), 100);
         
         currentPage = 1;
         displayTable();
@@ -1073,7 +1186,14 @@
     
     // ฟังก์ชันเปลี่ยนหน้า
     function changePage(page) {
-        const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+        // กรองข้อมูล Audit/QC สำหรับ pagination
+        const finalFilteredData = filteredData.filter(row => {
+            const typeOfProviderGroup = (row['Type of Provider Group'] || '').toLowerCase();
+            const hasAudit = typeOfProviderGroup.includes('audit') || typeOfProviderGroup.includes('qc');
+            return !hasAudit;
+        });
+        
+        const totalPages = Math.ceil(finalFilteredData.length / rowsPerPage);
         if (page < 1 || page > totalPages) return;
         
         currentPage = page;
@@ -1089,6 +1209,13 @@
             const hasAudit = typeOfProviderGroup.includes('audit') || typeOfProviderGroup.includes('qc');
             return !hasAudit;
         });
+        
+        if (cleanFilteredData.length === 0) {
+            alert('ไม่มีข้อมูลที่จะส่งออก');
+            return;
+        }
+        
+        console.log(`📄 ส่งออกข้อมูล ${cleanFilteredData.length.toLocaleString()} แถว`);
         
         // สร้าง workbook และ worksheet
         const wb = XLSX.utils.book_new();
@@ -1137,6 +1264,19 @@
         XLSX.writeFile(wb, fileName);
     }
     
+    // ฟังก์ชันเคลียร์การกรอง
+    function clearFilters() {
+        // เคลียร์ค่าตัวกรอง
+        document.getElementById('search-input').value = '';
+        document.getElementById('provider-filter').value = '';
+        document.getElementById('type-filter').value = '';
+        document.getElementById('rsm-filter').value = '';
+        document.getElementById('province-filter').value = '';
+        
+        // รีเฟรชข้อมูล
+        filterData();
+    }
+    
     // ฟังก์ชันโหลดข้อมูลช่าง
     async function loadTechnicianData(forceRefresh = false) {
         try {
@@ -1144,15 +1284,28 @@
             
             technicianData = await fetchTechnicianData(forceRefresh);
             
-            // Debug: ตรวจสอบข้อมูลที่มี Audit
+            console.log('📊 ข้อมูลหลังการกรอง:', technicianData.length, 'แถว');
+            
+            // ตรวจสอบข้อมูลที่มี Audit อีกครั้ง
             const auditData = technicianData.filter(row => {
-                const type = row['Type of Provider Group'].toLowerCase();
+                const type = (row['Type of Provider Group'] || '').toLowerCase();
                 return type.includes('audit') || type.includes('qc');
             });
+            
             if (auditData.length > 0) {
-                console.log('พบข้อมูล Audit/QC ที่ยังผ่านการกรอง:', auditData);
+                console.error('🚨 พบข้อมูล Audit/QC ที่ยังผ่านการกรอง:', auditData.length, 'แถว');
+                auditData.forEach((row, index) => {
+                    console.log(`แถวที่ ${index + 1}:`, row['Type of Provider Group']);
+                });
+                
+                // กรองออกแบบบังคับ
+                technicianData = technicianData.filter(row => {
+                    const type = (row['Type of Provider Group'] || '').toLowerCase();
+                    return !type.includes('audit') && !type.includes('qc');
+                });
+                console.log('🔧 กรองออกแล้ว เหลือ:', technicianData.length, 'แถว');
             } else {
-                console.log('กรองข้อมูล Audit/QC สำเร็จแล้ว');
+                console.log('✅ ไม่พบข้อมูล Audit/QC');
             }
             
             filteredData = [...technicianData];
@@ -1175,6 +1328,7 @@
             updatePagination();
             
         } catch (error) {
+            console.error('Error loading data:', error);
             document.getElementById('technician-table-container').innerHTML = '<div class="error">โหลดข้อมูลไม่ได้: ' + error.message + '</div>';
         }
     }
@@ -1203,10 +1357,16 @@
         });
         
         document.getElementById('refresh-btn').addEventListener('click', function() {
+            // เคลียร์ cache ก่อนรีเฟรช
+            dataCache = null;
+            cacheTime = null;
+            console.log('🗑️ เคลียร์ cache แล้ว');
             loadTechnicianData(true);
         });
         
         document.getElementById('download-btn').addEventListener('click', downloadExcel);
+        
+        document.getElementById('clear-filters-btn').addEventListener('click', clearFilters);
     });
     </script>
     
