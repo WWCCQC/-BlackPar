@@ -772,28 +772,55 @@
                 
                 const provider = (row[1] || '').trim(); // Provider (คอลัมน์ B)
                 const typeOfWork = (row[5] || '').trim(); // Type of work (คอลัมน์ F)
-                const typeOfProviderGroup = (row[4] || '').trim().toLowerCase(); // Type of Provider Group (คอลัมน์ E)
+                const typeOfProviderGroup = (row[4] || '').trim(); // Type of Provider Group (คอลัมน์ E)
                 const group = (row[8] || '').trim(); // Group (คอลัมน์ I)
+                
+                // Debug: แสดงข้อมูลที่มี Audit
+                if (typeOfProviderGroup.toLowerCase().includes('audit') || typeOfProviderGroup.toLowerCase().includes('qc')) {
+                    console.log('กรองออก - Type of Provider Group:', typeOfProviderGroup);
+                }
                 
                 // เงื่อนไขการกรอง
                 const validProvider = ['WW-Provider', 'เถ้าแก่เทค', 'True Tech'].includes(provider);
                 const validGroup = group !== 'TVG';
                 const validTypeOfWork = !['MPLS', 'Other'].includes(typeOfWork);
                 
-                // กรอง Audit, QC แบบละเอียด
-                const hasAudit = typeOfProviderGroup.includes('audit');
-                const hasQC = typeOfProviderGroup.includes('qc') || typeOfProviderGroup.includes('q.c');
-                const validTypeOfProviderGroup = !hasAudit && !hasQC;
+                // กรอง Audit, QC แบบเข้มงวด
+                const typeOfProviderGroupLower = typeOfProviderGroup.toLowerCase();
+                const hasAudit = typeOfProviderGroupLower.includes('audit');
+                const hasQC = typeOfProviderGroupLower.includes('qc') || typeOfProviderGroupLower.includes('q.c');
+                const hasAuditQC = typeOfProviderGroupLower.includes('audit(qc');
+                const validTypeOfProviderGroup = !hasAudit && !hasQC && !hasAuditQC;
                 
-                return validProvider && validGroup && validTypeOfWork && validTypeOfProviderGroup;
+                const isValid = validProvider && validGroup && validTypeOfWork && validTypeOfProviderGroup;
+                
+                // Debug: แสดงผลการกรอง
+                if (!isValid && (hasAudit || hasQC || hasAuditQC)) {
+                    console.log('ถูกกรองออกเนื่องจาก Audit/QC:', {
+                        typeOfProviderGroup: typeOfProviderGroup,
+                        hasAudit: hasAudit,
+                        hasQC: hasQC,
+                        hasAuditQC: hasAuditQC
+                    });
+                }
+                
+                return isValid;
             }).map(row => {
                 // เลือกเฉพาะคอลัมน์ที่ต้องการ
                 const selectedData = {};
                 REQUIRED_COLUMNS.forEach((colIndex, i) => {
                     selectedData[COLUMN_NAMES[i]] = row[colIndex] || '';
                 });
+                
+                // ตรวจสอบซ้ำหลัง mapping
+                const finalTypeOfProviderGroup = selectedData['Type of Provider Group'];
+                if (finalTypeOfProviderGroup && finalTypeOfProviderGroup.toLowerCase().includes('audit')) {
+                    console.warn('พบข้อมูล Audit ผ่านการกรอง:', selectedData);
+                    return null; // return null เพื่อไม่ให้ผ่าน
+                }
+                
                 return selectedData;
-            });
+            }).filter(item => item !== null); // กรอง null ออก
             
             // เก็บ cache
             dataCache = processedData;
@@ -953,7 +980,15 @@
         const container = document.getElementById('technician-table-container');
         const startIndex = (currentPage - 1) * rowsPerPage;
         const endIndex = startIndex + rowsPerPage;
-        const pageData = filteredData.slice(startIndex, endIndex);
+        
+        // กรองข้อมูล Audit/QC เป็นชั้นสุดท้าย
+        const finalFilteredData = filteredData.filter(row => {
+            const typeOfProviderGroup = (row['Type of Provider Group'] || '').toLowerCase();
+            const hasAudit = typeOfProviderGroup.includes('audit') || typeOfProviderGroup.includes('qc');
+            return !hasAudit;
+        });
+        
+        const pageData = finalFilteredData.slice(startIndex, endIndex);
         
         if (pageData.length === 0) {
             container.innerHTML = '<div class="error">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</div>';
@@ -1002,7 +1037,14 @@
     
     // ฟังก์ชันอัพเดท pagination
     function updatePagination() {
-        const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+        // กรองข้อมูล Audit/QC ก่อนคำนวณ pagination
+        const finalFilteredData = filteredData.filter(row => {
+            const typeOfProviderGroup = (row['Type of Provider Group'] || '').toLowerCase();
+            const hasAudit = typeOfProviderGroup.includes('audit') || typeOfProviderGroup.includes('qc');
+            return !hasAudit;
+        });
+        
+        const totalPages = Math.ceil(finalFilteredData.length / rowsPerPage);
         const paginationContainer = document.getElementById('pagination');
         
         let html = '';
@@ -1041,6 +1083,13 @@
     
     // ฟังก์ชันดาวน์โหลด Excel
     function downloadExcel() {
+        // กรองข้อมูล Audit/QC ก่อนส่งออก
+        const cleanFilteredData = filteredData.filter(row => {
+            const typeOfProviderGroup = (row['Type of Provider Group'] || '').toLowerCase();
+            const hasAudit = typeOfProviderGroup.includes('audit') || typeOfProviderGroup.includes('qc');
+            return !hasAudit;
+        });
+        
         // สร้าง workbook และ worksheet
         const wb = XLSX.utils.book_new();
         
@@ -1048,7 +1097,7 @@
         const excelData = [COLUMN_NAMES]; // Header row
         
         // เพิ่มข้อมูลแต่ละแถว
-        filteredData.forEach(row => {
+        cleanFilteredData.forEach(row => {
             const rowData = COLUMN_NAMES.map(column => row[column] || '');
             excelData.push(rowData);
         });
