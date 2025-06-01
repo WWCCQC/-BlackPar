@@ -779,7 +779,7 @@
                 const validProvider = ['WW-Provider', 'เถ้าแก่เทค', 'True Tech'].includes(provider);
                 const validGroup = group !== 'TVG';
                 const validTypeOfWork = !['MPLS', 'Other'].includes(typeOfWork);
-                const validTypeOfProviderGroup = typeOfProviderGroup !== 'Audit(QC)';
+                const validTypeOfProviderGroup = !typeOfProviderGroup.includes('Audit(QC)') && !typeOfProviderGroup.includes('Audit') && !typeOfProviderGroup.includes('QC');
                 
                 return validProvider && validGroup && validTypeOfWork && validTypeOfProviderGroup;
             }).map(row => {
