@@ -99,11 +99,13 @@
             background-color: #f8f9fa;
             padding: 10px;
             border-radius: 5px;
+            position: relative;
         }
         
         #table-container > div {
             height: 100%;
             overflow: auto;
+            position: relative;
         }
         
         table { 
@@ -111,6 +113,13 @@
             width: 100%;
             background-color: white;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        /* Table header styles */
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 20;
         }
         
         th, td { 
@@ -126,37 +135,76 @@
             background-color: #2c3e50;
             color: white;
             font-weight: 600;
-            position: sticky;
-            top: 0;
-            z-index: 10;
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            position: sticky;
+            top: 0;
+            z-index: 15;
+        }
+        
+        /* Fix for sticky header with border */
+        th::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -1px;
+            border-bottom: 1px solid #dee2e6;
         }
         
         /* Zebra striping for better readability */
-        tr:nth-child(even) td {
+        tbody tr:nth-child(even) td {
             background-color: #f8f9fa;
         }
         
         /* Hover effect */
-        tr:hover td {
+        tbody tr:hover td {
             background-color: #e9ecef !important;
         }
         
-        /* First few columns styling */
-        td:nth-child(1), td:nth-child(2), td:nth-child(3), td:nth-child(4) {
-            font-weight: 500;
-            background-color: #f1f3f5;
+        /* First few columns styling - sticky columns */
+        tbody td:nth-child(1), 
+        tbody td:nth-child(2), 
+        tbody td:nth-child(3), 
+        tbody td:nth-child(4),
+        th:nth-child(1),
+        th:nth-child(2),
+        th:nth-child(3),
+        th:nth-child(4) {
             position: sticky;
-            left: 0;
-            z-index: 5;
+            background-color: #f1f3f5;
+            font-weight: 500;
+            z-index: 10;
         }
         
-        td:nth-child(1) { left: 0; }
-        td:nth-child(2) { left: 100px; }
-        td:nth-child(3) { left: 200px; }
-        td:nth-child(4) { left: 300px; }
+        /* Sticky column positions */
+        td:nth-child(1), th:nth-child(1) { left: 0; min-width: 80px; }
+        td:nth-child(2), th:nth-child(2) { left: 80px; min-width: 120px; }
+        td:nth-child(3), th:nth-child(3) { left: 200px; min-width: 100px; }
+        td:nth-child(4), th:nth-child(4) { left: 300px; min-width: 150px; }
+        
+        /* Header sticky columns need higher z-index */
+        th:nth-child(1),
+        th:nth-child(2),
+        th:nth-child(3),
+        th:nth-child(4) {
+            z-index: 25;
+            background-color: #2c3e50;
+        }
+        
+        /* Add shadow to sticky columns */
+        td:nth-child(4)::after,
+        th:nth-child(4)::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: -5px;
+            bottom: 0;
+            width: 5px;
+            background: linear-gradient(to right, rgba(0,0,0,0.1), transparent);
+            pointer-events: none;
+        }
         
         /* Status column styling */
         td:nth-child(5), td:nth-child(6) {
@@ -225,6 +273,179 @@
         .section.active {
             display: block;
         }
+        
+        /* Technician page styles */
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            border-left: 4px solid #3498db;
+        }
+        
+        .card.install { border-left-color: #27ae60; }
+        .card.repair { border-left-color: #e74c3c; }
+        .card.team { border-left-color: #f39c12; }
+        
+        .card h3 {
+            color: #2c3e50;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        
+        .card .number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #3498db;
+            margin-bottom: 5px;
+        }
+        
+        .card.install .number { color: #27ae60; }
+        .card.repair .number { color: #e74c3c; }
+        .card.team .number { color: #f39c12; }
+        
+        .card .label {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        
+        /* Chart container */
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            height: 400px;
+        }
+        
+        .chart-container h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        /* Controls */
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .controls-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .controls input, .controls select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .controls button {
+            padding: 8px 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .controls button:hover {
+            background: #2980b9;
+        }
+        
+        .controls button.refresh {
+            background: #27ae60;
+        }
+        
+        .controls button.refresh:hover {
+            background: #219a52;
+        }
+        
+        .controls button.download {
+            background: #f39c12;
+        }
+        
+        .controls button.download:hover {
+            background: #e67e22;
+        }
+        
+        /* Table pagination */
+        .table-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .pagination {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        
+        .pagination button {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        
+        .pagination button:hover {
+            background: #f8f9fa;
+        }
+        
+        .pagination button.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Responsive adjustments for new elements */
+        @media (max-width: 768px) {
+            .stats-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .table-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .pagination {
+                justify-content: center;
+            }
+        }
     </style>
 </head>
 <body>
@@ -258,6 +479,7 @@
         <div id="remain-group" class="section active">
             <div class="content-section">
                 <h2>Remain Par By Group Code - ข้อมูลจาก Google Sheet</h2>
+                
                 <div id="table-container" class="loading">กำลังโหลดข้อมูล...</div>
             </div>
         </div>
@@ -274,7 +496,79 @@
         <div id="technician-register" class="section">
             <div class="content-section">
                 <h2>ข้อมูลช่างที่ขึ้นทะเบียน</h2>
-                <p>ข้อมูลจะแสดงที่นี่</p>
+                
+                <!-- Stats Cards -->
+                <div class="stats-cards">
+                    <div class="card team">
+                        <h3>จำนวนช่าง (กองงาน)</h3>
+                        <div class="number" id="team-count">-</div>
+                        <div class="label">หัวหน้าทีม</div>
+                    </div>
+                    <div class="card">
+                        <h3>จำนวนช่าง (คน)</h3>
+                        <div class="number" id="person-count">-</div>
+                        <div class="label">ทั้งหมด</div>
+                    </div>
+                    <div class="card install">
+                        <h3>ช่างติดตั้ง</h3>
+                        <div class="number" id="install-count">-</div>
+                        <div class="label">กองงาน / คน</div>
+                    </div>
+                    <div class="card repair">
+                        <h3>ช่างซ่อม</h3>
+                        <div class="number" id="repair-count">-</div>
+                        <div class="label">กองงาน / คน</div>
+                    </div>
+                </div>
+                
+                <!-- Chart -->
+                <div class="chart-container">
+                    <h3>จำนวนกองงานแยกตาม RSM</h3>
+                    <canvas id="rsm-chart"></canvas>
+                </div>
+                
+                <!-- Controls -->
+                <div class="controls">
+                    <div class="controls-row">
+                        <input type="text" id="search-input" placeholder="ค้นหา...">
+                        <select id="provider-filter">
+                            <option value="">ทุก Provider</option>
+                        </select>
+                        <select id="type-filter">
+                            <option value="">ทุก Type of Provider Group</option>
+                        </select>
+                        <select id="rsm-filter">
+                            <option value="">ทุก RSM</option>
+                        </select>
+                        <select id="province-filter">
+                            <option value="">ทุกจังหวัด</option>
+                        </select>
+                    </div>
+                    <div class="controls-row">
+                        <button id="refresh-btn" class="refresh">รีเฟรชข้อมูล</button>
+                        <button id="download-btn" class="download">ดาวน์โหลด Excel</button>
+                    </div>
+                </div>
+                
+                <!-- Table Controls -->
+                <div class="table-controls">
+                    <div>
+                        แสดง 
+                        <select id="rows-per-page">
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="500">500</option>
+                        </select>
+                        แถวต่อหน้า
+                    </div>
+                    <div class="pagination" id="pagination">
+                        <!-- Pagination buttons will be generated here -->
+                    </div>
+                </div>
+                
+                <!-- Data Table -->
+                <div id="technician-table-container" class="loading">กำลังโหลดข้อมูล...</div>
             </div>
         </div>
         
@@ -316,10 +610,14 @@
             // ไปยังตำแหน่ง rowData
             const rowData = json.sheets[0].data[0].rowData;
             let html = '<div style="height: 100%; overflow: auto;"><table>';
+            let headerHtml = '<thead>';
+            let bodyHtml = '<tbody>';
             
             rowData.forEach((row, rIdx) => {
                 if (!row.values) return;
-                html += "<tr>";
+                
+                let rowHtml = "<tr>";
+                
                 row.values.forEach((cell, cIdx) => {
                     let value = cell.formattedValue || "";
                     let style = "";
@@ -387,36 +685,430 @@
                         }
                     }
                     
-                    // เพิ่ม class สำหรับคอลัมน์แรกๆ
-                    let className = "";
-                    if (cIdx < 4) {
-                        className = "sticky-column";
-                    }
-                    
-                    html += `<${tag} class="${className}" style="${style}" title="${cell.formattedValue || ''}">${value}</${tag}>`;
+                    rowHtml += `<${tag} style="${style}" title="${cell.formattedValue || ''}">${value}</${tag}>`;
                 });
-                html += "</tr>";
+                rowHtml += "</tr>";
+                
+                // แยก header และ body
+                if (rIdx === 0) {
+                    headerHtml += rowHtml;
+                } else {
+                    bodyHtml += rowHtml;
+                }
             });
-            html += "</table></div>";
-            document.getElementById('table-container').innerHTML = html;
             
-            // เพิ่มการ highlight แถวเมื่อ hover
-            const table = document.querySelector('#table-container table');
-            if (table) {
-                const rows = table.querySelectorAll('tr');
-                rows.forEach(row => {
-                    row.addEventListener('mouseenter', function() {
-                        this.style.backgroundColor = '#e3f2fd';
-                    });
-                    row.addEventListener('mouseleave', function() {
-                        this.style.backgroundColor = '';
-                    });
-                });
-            }
+            headerHtml += '</thead>';
+            bodyHtml += '</tbody>';
+            html += headerHtml + bodyHtml + "</table></div>";
+            document.getElementById('table-container').innerHTML = html;
         })
         .catch(err => {
             document.getElementById('table-container').innerHTML = '<div class="error">โหลดข้อมูลไม่ได้: ' + err + '</div>';
         });
+    
+    // ===================== ข้อมูลช่างที่ขึ้นทะเบียน =====================
+    
+    // Global variables สำหรับข้อมูลช่าง
+    let technicianData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    let rowsPerPage = 25;
+    let dataCache = null;
+    let cacheTime = null;
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 นาที
+    
+    // URL สำหรับดึงข้อมูล CSV
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSYKfT03Rf95K3lXJf1n20H2aLietUGI0wjFdC21AusbFEVcsT61-BR4v_s3Na9YLcpCIxyWuyOW-uF/pub?gid=813367910&single=true&output=csv';
+    
+    // คอลัมน์ที่ต้องการ (ตาม index ของ CSV)
+    const REQUIRED_COLUMNS = [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 17, 31]; // A,B,D,E,F,G,H,I,J,K,L,N,R,AF
+    const COLUMN_NAMES = ['Area', 'Provider', 'CTM', 'RSM', 'Type of Provider Group', 'Type of work', 'ประเภทการรับงาน', 'Group', 'Province', 'Depot_Name', 'Depot_Code', 'Team_Name', 'สถานะกองงาน', 'Status'];
+    
+    // ฟังก์ชันแปลง CSV เป็น Array
+    function parseCSV(csvText) {
+        const lines = csvText.split('\n');
+        const result = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const row = [];
+            let inQuotes = false;
+            let current = '';
+            
+            for (let j = 0; j < line.length; j++) {
+                const char = line[j];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    row.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            row.push(current.trim());
+            result.push(row);
+        }
+        return result;
+    }
+    
+    // ฟังก์ชันดึงข้อมูลจาก CSV
+    async function fetchTechnicianData(forceRefresh = false) {
+        // ตรวจสอบ cache
+        if (!forceRefresh && dataCache && cacheTime && (Date.now() - cacheTime < CACHE_DURATION)) {
+            return dataCache;
+        }
+        
+        try {
+            const response = await fetch(CSV_URL);
+            const csvText = await response.text();
+            const allData = parseCSV(csvText);
+            
+            // ข้ามหัวข้อ (แถวแรก) และกรองข้อมูลตามเงื่อนไข
+            const processedData = allData.slice(1).filter(row => {
+                if (row.length < Math.max(...REQUIRED_COLUMNS)) return false;
+                
+                const provider = row[1] || ''; // Provider (คอลัมน์ B)
+                const typeOfWork = row[5] || ''; // Type of work (คอลัมน์ F)
+                const typeOfProviderGroup = row[4] || ''; // Type of Provider Group (คอลัมน์ E)
+                const group = row[8] || ''; // Group (คอลัมน์ I)
+                
+                // เงื่อนไขการกรอง
+                const validProvider = ['WW-Provider', 'เถ้าแก่เทค', 'True Tech'].includes(provider);
+                const validGroup = group !== 'TVG';
+                const validTypeOfWork = !['MPLS', 'Other'].includes(typeOfWork);
+                const validTypeOfProviderGroup = typeOfProviderGroup !== 'Audit(QC)';
+                
+                return validProvider && validGroup && validTypeOfWork && validTypeOfProviderGroup;
+            }).map(row => {
+                // เลือกเฉพาะคอลัมน์ที่ต้องการ
+                const selectedData = {};
+                REQUIRED_COLUMNS.forEach((colIndex, i) => {
+                    selectedData[COLUMN_NAMES[i]] = row[colIndex] || '';
+                });
+                return selectedData;
+            });
+            
+            // เก็บ cache
+            dataCache = processedData;
+            cacheTime = Date.now();
+            
+            return processedData;
+        } catch (error) {
+            console.error('Error fetching CSV data:', error);
+            throw error;
+        }
+    }
+    
+    // ฟังก์ชันคำนวณสถิติ
+    function calculateStats(data) {
+        const teamCount = data.filter(row => row['สถานะกองงาน'].includes('หัวหน้า')).length;
+        const personCount = data.length;
+        
+        const installData = data.filter(row => row['Type of Provider Group'].includes('Install'));
+        const installTeamCount = installData.filter(row => row['สถานะกองงาน'].includes('หัวหน้า')).length;
+        const installPersonCount = installData.length;
+        
+        const repairData = data.filter(row => row['Type of Provider Group'].includes('Repair'));
+        const repairTeamCount = repairData.filter(row => row['สถานะกองงาน'].includes('หัวหน้า')).length;
+        const repairPersonCount = repairData.length;
+        
+        return {
+            teamCount,
+            personCount,
+            installCount: `${installTeamCount} / ${installPersonCount}`,
+            repairCount: `${repairTeamCount} / ${repairPersonCount}`
+        };
+    }
+    
+    // ฟังก์ชันสร้างกราฟ RSM
+    function createRSMChart(data) {
+        const rsmCounts = {};
+        
+        // นับจำนวนหัวหน้าในแต่ละ RSM
+        data.filter(row => row['สถานะกองงาน'].includes('หัวหน้า')).forEach(row => {
+            const rsm = row['RSM'] || 'ไม่ระบุ';
+            rsmCounts[rsm] = (rsmCounts[rsm] || 0) + 1;
+        });
+        
+        // เรียงลำดับ RSM1-RSM8
+        const sortedRSM = Object.keys(rsmCounts).sort((a, b) => {
+            if (a.startsWith('RSM') && b.startsWith('RSM')) {
+                return parseInt(a.replace('RSM', '')) - parseInt(b.replace('RSM', ''));
+            }
+            return a.localeCompare(b);
+        });
+        
+        const canvas = document.getElementById('rsm-chart');
+        const ctx = canvas.getContext('2d');
+        
+        // เคลียร์ canvas
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        // วาดกราฟแท่ง
+        const maxValue = Math.max(...Object.values(rsmCounts));
+        const barWidth = (canvas.width - 100) / sortedRSM.length;
+        const barMaxHeight = canvas.height - 100;
+        
+        ctx.fillStyle = '#3498db';
+        ctx.font = '14px Arial';
+        
+        sortedRSM.forEach((rsm, index) => {
+            const value = rsmCounts[rsm];
+            const barHeight = (value / maxValue) * barMaxHeight;
+            const x = 50 + index * barWidth;
+            const y = canvas.height - 50 - barHeight;
+            
+            // วาดแท่ง
+            ctx.fillStyle = '#3498db';
+            ctx.fillRect(x + 10, y, barWidth - 20, barHeight);
+            
+            // เขียนค่า
+            ctx.fillStyle = '#2c3e50';
+            ctx.textAlign = 'center';
+            ctx.fillText(value.toString(), x + barWidth/2, y - 10);
+            ctx.fillText(rsm, x + barWidth/2, canvas.height - 30);
+        });
+    }
+    
+    // ฟังก์ชันสร้างตัวเลือกใน dropdown
+    function populateFilters(data) {
+        const providers = [...new Set(data.map(row => row['Provider']))].sort();
+        const types = [...new Set(data.map(row => row['Type of Provider Group']))].sort();
+        const rsms = [...new Set(data.map(row => row['RSM']))].sort();
+        const provinces = [...new Set(data.map(row => row['Province']))].sort();
+        
+        populateSelect('provider-filter', providers);
+        populateSelect('type-filter', types);
+        populateSelect('rsm-filter', rsms);
+        populateSelect('province-filter', provinces);
+    }
+    
+    function populateSelect(selectId, options) {
+        const select = document.getElementById(selectId);
+        const currentValue = select.value;
+        
+        // เคลียร์ options เก่า (ยกเว้น option แรก)
+        while (select.children.length > 1) {
+            select.removeChild(select.lastChild);
+        }
+        
+        // เพิ่ม options ใหม่
+        options.forEach(option => {
+            if (option) {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                select.appendChild(optionElement);
+            }
+        });
+        
+        // คืนค่าเดิม
+        select.value = currentValue;
+    }
+    
+    // ฟังก์ชันกรองข้อมูล
+    function filterData() {
+        const searchTerm = document.getElementById('search-input').value.toLowerCase();
+        const providerFilter = document.getElementById('provider-filter').value;
+        const typeFilter = document.getElementById('type-filter').value;
+        const rsmFilter = document.getElementById('rsm-filter').value;
+        const provinceFilter = document.getElementById('province-filter').value;
+        
+        filteredData = technicianData.filter(row => {
+            const matchSearch = !searchTerm || Object.values(row).some(value => 
+                value.toString().toLowerCase().includes(searchTerm)
+            );
+            const matchProvider = !providerFilter || row['Provider'] === providerFilter;
+            const matchType = !typeFilter || row['Type of Provider Group'] === typeFilter;
+            const matchRSM = !rsmFilter || row['RSM'] === rsmFilter;
+            const matchProvince = !provinceFilter || row['Province'] === provinceFilter;
+            
+            return matchSearch && matchProvider && matchType && matchRSM && matchProvince;
+        });
+        
+        currentPage = 1;
+        displayTable();
+        updatePagination();
+    }
+    
+    // ฟังก์ชันแสดงตาราง
+    function displayTable() {
+        const container = document.getElementById('technician-table-container');
+        const startIndex = (currentPage - 1) * rowsPerPage;
+        const endIndex = startIndex + rowsPerPage;
+        const pageData = filteredData.slice(startIndex, endIndex);
+        
+        if (pageData.length === 0) {
+            container.innerHTML = '<div class="error">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</div>';
+            return;
+        }
+        
+        let html = '<div style="height: 100%; overflow: auto;"><table>';
+        
+        // Header
+        html += '<thead><tr>';
+        COLUMN_NAMES.forEach(column => {
+            html += `<th>${column}</th>`;
+        });
+        html += '</tr></thead>';
+        
+        // Body
+        html += '<tbody>';
+        pageData.forEach(row => {
+            html += '<tr>';
+            COLUMN_NAMES.forEach(column => {
+                let value = row[column] || '-';
+                let style = '';
+                
+                // สีพิเศษสำหรับ Status
+                if (column === 'Status') {
+                    if (value.toLowerCase() === 'available') {
+                        style = 'background: #28a745; color: white; font-weight: bold;';
+                    } else if (value.toLowerCase() === 'full') {
+                        style = 'background: #dc3545; color: white; font-weight: bold;';
+                    }
+                }
+                
+                // เน้นหัวหน้า
+                if (column === 'สถานะกองงาน' && value.includes('หัวหน้า')) {
+                    style = 'background: #f39c12; color: white; font-weight: bold;';
+                }
+                
+                html += `<td style="${style}">${value}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        
+        container.innerHTML = html;
+    }
+    
+    // ฟังก์ชันอัพเดท pagination
+    function updatePagination() {
+        const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+        const paginationContainer = document.getElementById('pagination');
+        
+        let html = '';
+        
+        // Previous button
+        html += `<button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">‹</button>`;
+        
+        // Page numbers
+        const maxVisible = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        
+        if (endPage - startPage < maxVisible - 1) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<button class="${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+        }
+        
+        // Next button
+        html += `<button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">›</button>`;
+        
+        paginationContainer.innerHTML = html;
+    }
+    
+    // ฟังก์ชันเปลี่ยนหน้า
+    function changePage(page) {
+        const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+        if (page < 1 || page > totalPages) return;
+        
+        currentPage = page;
+        displayTable();
+        updatePagination();
+    }
+    
+    // ฟังก์ชันดาวน์โหลด Excel
+    function downloadExcel() {
+        // สร้าง CSV content
+        let csvContent = COLUMN_NAMES.join(',') + '\n';
+        filteredData.forEach(row => {
+            const values = COLUMN_NAMES.map(column => {
+                const value = row[column] || '';
+                // ใส่ quotes ถ้ามี comma
+                return value.includes(',') ? `"${value}"` : value;
+            });
+            csvContent += values.join(',') + '\n';
+        });
+        
+        // สร้าง blob และดาวน์โหลด
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'ข้อมูลช่างที่ขึ้นทะเบียน.csv';
+        link.click();
+    }
+    
+    // ฟังก์ชันโหลดข้อมูลช่าง
+    async function loadTechnicianData(forceRefresh = false) {
+        try {
+            document.getElementById('technician-table-container').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
+            
+            technicianData = await fetchTechnicianData(forceRefresh);
+            filteredData = [...technicianData];
+            
+            // อัพเดทสถิติ
+            const stats = calculateStats(technicianData);
+            document.getElementById('team-count').textContent = stats.teamCount;
+            document.getElementById('person-count').textContent = stats.personCount;
+            document.getElementById('install-count').textContent = stats.installCount;
+            document.getElementById('repair-count').textContent = stats.repairCount;
+            
+            // สร้างกราฟ
+            setTimeout(() => createRSMChart(technicianData), 100);
+            
+            // เติมข้อมูลใน filters
+            populateFilters(technicianData);
+            
+            // แสดงตาราง
+            displayTable();
+            updatePagination();
+            
+        } catch (error) {
+            document.getElementById('technician-table-container').innerHTML = '<div class="error">โหลดข้อมูลไม่ได้: ' + error.message + '</div>';
+        }
+    }
+    
+    // Event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // โหลดข้อมูลเมื่อเข้าหน้าข้อมูลช่าง
+        document.querySelector('a[href="#technician-register"]').addEventListener('click', function() {
+            if (technicianData.length === 0) {
+                loadTechnicianData();
+            }
+        });
+        
+        // Event listeners สำหรับ controls
+        document.getElementById('search-input').addEventListener('input', filterData);
+        document.getElementById('provider-filter').addEventListener('change', filterData);
+        document.getElementById('type-filter').addEventListener('change', filterData);
+        document.getElementById('rsm-filter').addEventListener('change', filterData);
+        document.getElementById('province-filter').addEventListener('change', filterData);
+        
+        document.getElementById('rows-per-page').addEventListener('change', function() {
+            rowsPerPage = parseInt(this.value);
+            currentPage = 1;
+            displayTable();
+            updatePagination();
+        });
+        
+        document.getElementById('refresh-btn').addEventListener('click', function() {
+            loadTechnicianData(true);
+        });
+        
+        document.getElementById('download-btn').addEventListener('click', downloadExcel);
+    });
     </script>
+    
+    <!-- Chart.js สำหรับกราฟ (ถ้าต้องการใช้) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
