@@ -577,7 +577,51 @@
         <div id="training-status" class="section">
             <div class="content-section">
                 <h2>สถานะการอบรมช่าง</h2>
-                <p>ข้อมูลจะแสดงที่นี่</p>
+                
+                <!-- Controls -->
+                <div class="controls">
+                    <div class="controls-row">
+                        <input type="text" id="training-search-input" placeholder="ค้นหา...">
+                        <select id="training-month-filter">
+                            <option value="">ทุกเดือน</option>
+                        </select>
+                        <select id="training-area-filter">
+                            <option value="">ทุกพื้นที่</option>
+                        </select>
+                        <select id="training-province-filter">
+                            <option value="">ทุกจังหวัด</option>
+                        </select>
+                        <select id="training-status-filter">
+                            <option value="">ทุกสถานะ</option>
+                        </select>
+                    </div>
+                    <div class="controls-row">
+                        <button id="training-refresh-btn" class="refresh">รีเฟรชข้อมูล</button>
+                        <button id="training-download-btn" class="download">ดาวน์โหลด Excel</button>
+                        <button id="training-clear-filters-btn" style="background: #95a5a6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">เคลียร์การกรอง</button>
+                        <button id="training-debug-btn" style="background: #9b59b6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">ทดสอบการดึงข้อมูล</button>
+                    </div>
+                </div>
+                
+                <!-- Table Controls -->
+                <div class="table-controls">
+                    <div>
+                        แสดง 
+                        <select id="training-rows-per-page">
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="500">500</option>
+                        </select>
+                        แถวต่อหน้า
+                    </div>
+                    <div class="pagination" id="training-pagination">
+                        <!-- Pagination buttons will be generated here -->
+                    </div>
+                </div>
+                
+                <!-- Data Table -->
+                <div id="training-table-container" class="loading">กำลังโหลดข้อมูล...</div>
             </div>
         </div>
     </div>
@@ -1333,6 +1377,398 @@
         }
     }
     
+    // ===================== สถานะการอบรมช่าง =====================
+    
+    // Global variables สำหรับข้อมูลการอบรม
+    let trainingData = [];
+    let filteredTrainingData = [];
+    let currentTrainingPage = 1;
+    let trainingRowsPerPage = 25;
+    let trainingDataCache = null;
+    let trainingCacheTime = null;
+    
+    // URL สำหรับดึงข้อมูล CSV การอบรม
+    const TRAINING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTLKGmFsdD4oMcVdnf_wyrwAD3-3R7Ys9hXCg2gwBsudfJIUliRymBnVYHapN7a3Yq08Lgxf9cYYV6Y/pub?gid=377151035&single=true&output=csv';
+    
+    // คอลัมน์ที่ต้องการสำหรับข้อมูลการอบรม (ตาม index ของ CSV)
+    const TRAINING_REQUIRED_COLUMNS = [28, 26, 8, 7, 6, 34]; // AC, AA, I, H, G, AI
+    const TRAINING_COLUMN_NAMES = ['เดือนอบรม', 'พื้นที่', 'จังหวัดที่ตั้งร้านตัวแทน', 'รหัสตัวแทน', 'บจก./หจก/ร้าน (ตัวแทน)', 'Status ล่าสุด'];
+    const YEAR_COLUMN_INDEX = 41; // คอลัมน์ AP สำหรับกรองปี
+    
+    // ฟังก์ชันดึงข้อมูลการอบรมจาก CSV
+    async function fetchTrainingData(forceRefresh = false) {
+        // ตรวจสอบ cache
+        if (!forceRefresh && trainingDataCache && trainingCacheTime && (Date.now() - trainingCacheTime < CACHE_DURATION)) {
+            return trainingDataCache;
+        }
+        
+        try {
+            console.log('🔗 กำลังดึงข้อมูลการอบรมจาก:', TRAINING_CSV_URL);
+            
+            const response = await fetch(TRAINING_CSV_URL, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache',
+                headers: {
+                    'Accept': 'text/csv,text/plain,*/*'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const csvText = await response.text();
+            console.log('📄 ได้รับข้อมูล CSV, ขนาด:', csvText.length, 'ตัวอักษร');
+            console.log('📄 ตัวอย่างข้อมูล 500 ตัวอักษรแรก:', csvText.substring(0, 500));
+            
+            if (!csvText || csvText.trim().length === 0) {
+                throw new Error('ไม่มีข้อมูลใน CSV');
+            }
+            
+            const allData = parseCSV(csvText);
+            console.log('📚 ข้อมูลการอบรมทั้งหมด:', allData.length, 'แถว');
+            
+            if (allData.length < 2) {
+                throw new Error('ข้อมูลไม่เพียงพอ (ต้องมีอย่างน้อย 2 แถว)');
+            }
+            
+            // แสดงตัวอย่างข้อมูลแถวแรก (หัวข้อ)
+            console.log('📋 หัวข้อคอลัมน์:', allData[0]);
+            console.log('📋 จำนวนคอลัมน์:', allData[0].length);
+            
+            // แสดงข้อมูลแถวที่ 2 เป็นตัวอย่าง
+            if (allData[1]) {
+                console.log('📋 ตัวอย่างข้อมูลแถวที่ 2:', allData[1]);
+                console.log('📋 ค่าในคอลัมน์ AP (index 41):', allData[1][YEAR_COLUMN_INDEX]);
+            }
+            
+            // ข้ามหัวข้อ (แถวแรก) และกรองข้อมูลตามเงื่อนไข
+            const processedData = allData.slice(1).filter((row, index) => {
+                // ตรวจสอบว่าแถวมีข้อมูลเพียงพอ
+                if (row.length < Math.max(...TRAINING_REQUIRED_COLUMNS, YEAR_COLUMN_INDEX + 1)) {
+                    if (index < 5) {
+                        console.log(`❌ แถวที่ ${index + 2}: ไม่มีคอลัมน์เพียงพอ (มี ${row.length} ต้องการ ${Math.max(...TRAINING_REQUIRED_COLUMNS, YEAR_COLUMN_INDEX + 1)})`);
+                    }
+                    return false;
+                }
+                
+                // กรองเฉพาะปี 2025 จากคอลัมน์ AP
+                const yearValue = (row[YEAR_COLUMN_INDEX] || '').toString().trim();
+                const isYear2025 = yearValue === '2025' || yearValue.includes('2025');
+                
+                if (!isYear2025) {
+                    if (index < 10) { // แสดงตัวอย่าง 10 แถวแรก
+                        console.log(`❌ แถวที่ ${index + 2}: ไม่ใช่ปี 2025 (ค่าที่ได้: "${yearValue}")`);
+                    }
+                    return false;
+                }
+                
+                if (index < 5) { // แสดงตัวอย่าง 5 แถวแรกที่ผ่าน
+                    console.log(`✅ แถวที่ ${index + 2}: ข้อมูลผ่านการกรอง ปี 2025 (ค่าที่ได้: "${yearValue}")`);
+                }
+                return true;
+            }).map((row, index) => {
+                // เลือกเฉพาะคอลัมน์ที่ต้องการ
+                const selectedData = {};
+                TRAINING_REQUIRED_COLUMNS.forEach((colIndex, i) => {
+                    const value = (row[colIndex] || '').toString().trim();
+                    selectedData[TRAINING_COLUMN_NAMES[i]] = value;
+                });
+                
+                if (index < 3) { // แสดงตัวอย่าง 3 แถวแรก
+                    console.log(`📊 ข้อมูลที่ประมวลผลแล้วแถวที่ ${index + 1}:`, selectedData);
+                }
+                
+                return selectedData;
+            });
+            
+            console.log('📊 ข้อมูลการอบรมหลังการกรอง:', processedData.length, 'แถว');
+            
+            if (processedData.length === 0) {
+                console.warn('⚠️ ไม่พบข้อมูลปี 2025 ในไฟล์');
+                // ลองดูข้อมูลในคอลัมน์ AP ทั้งหมด
+                const yearSamples = allData.slice(1, 20).map((row, index) => ({
+                    row: index + 2,
+                    yearValue: row[YEAR_COLUMN_INDEX] || 'ว่าง',
+                    rowLength: row.length
+                }));
+                console.log('🔍 ตัวอย่างค่าในคอลัมน์ปี (AP, index 41):', yearSamples);
+                
+                // แสดงคอลัมน์ที่เราต้องการ
+                console.log('🎯 คอลัมน์ที่ต้องการ:', {
+                    'AC (เดือนอบรม)': 28,
+                    'AA (พื้นที่)': 26,
+                    'I (จังหวัดที่ตั้งร้านตัวแทน)': 8,
+                    'H (รหัสตัวแทน)': 7,
+                    'G (บจก./หจก/ร้าน)': 6,
+                    'AI (Status ล่าสุด)': 34,
+                    'AP (ปี)': 41
+                });
+            }
+            
+            // เก็บ cache
+            trainingDataCache = processedData;
+            trainingCacheTime = Date.now();
+            
+            return processedData;
+        } catch (error) {
+            console.error('❌ Error fetching training CSV data:', error);
+            console.error('📍 URL:', TRAINING_CSV_URL);
+            
+            // ตรวจสอบประเภทของ error
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                throw new Error('ไม่สามารถเชื่อมต่อกับ Google Sheets ได้ - ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
+            } else if (error.message.includes('CORS')) {
+                throw new Error('ปัญหา CORS - ไม่สามารถเข้าถึงข้อมูลจาก Google Sheets ได้');
+            } else {
+                throw new Error(`ไม่สามารถดึงข้อมูลได้: ${error.message}`);
+            }
+        }
+    }
+    
+    // ฟังก์ชันสร้างตัวเลือกใน dropdown สำหรับการอบรม
+    function populateTrainingFilters(data) {
+        const months = [...new Set(data.map(row => row['เดือนอบรม']))].filter(month => month).sort();
+        const areas = [...new Set(data.map(row => row['พื้นที่']))].filter(area => area).sort();
+        const provinces = [...new Set(data.map(row => row['จังหวัดที่ตั้งร้านตัวแทน']))].filter(province => province).sort();
+        const statuses = [...new Set(data.map(row => row['Status ล่าสุด']))].filter(status => status).sort();
+        
+        populateTrainingSelect('training-month-filter', months);
+        populateTrainingSelect('training-area-filter', areas);
+        populateTrainingSelect('training-province-filter', provinces);
+        populateTrainingSelect('training-status-filter', statuses);
+    }
+    
+    function populateTrainingSelect(selectId, options) {
+        const select = document.getElementById(selectId);
+        const currentValue = select.value;
+        
+        // เคลียร์ options เก่า (ยกเว้น option แรก)
+        while (select.children.length > 1) {
+            select.removeChild(select.lastChild);
+        }
+        
+        // เพิ่ม options ใหม่
+        options.forEach(option => {
+            if (option) {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                select.appendChild(optionElement);
+            }
+        });
+        
+        // คืนค่าเดิม
+        select.value = currentValue;
+    }
+    
+    // ฟังก์ชันกรองข้อมูลการอบรม
+    function filterTrainingData() {
+        const searchTerm = document.getElementById('training-search-input').value.toLowerCase();
+        const monthFilter = document.getElementById('training-month-filter').value;
+        const areaFilter = document.getElementById('training-area-filter').value;
+        const provinceFilter = document.getElementById('training-province-filter').value;
+        const statusFilter = document.getElementById('training-status-filter').value;
+        
+        filteredTrainingData = trainingData.filter(row => {
+            const matchSearch = !searchTerm || Object.values(row).some(value => 
+                value.toString().toLowerCase().includes(searchTerm)
+            );
+            const matchMonth = !monthFilter || row['เดือนอบรม'] === monthFilter;
+            const matchArea = !areaFilter || row['พื้นที่'] === areaFilter;
+            const matchProvince = !provinceFilter || row['จังหวัดที่ตั้งร้านตัวแทน'] === provinceFilter;
+            const matchStatus = !statusFilter || row['Status ล่าสุด'] === statusFilter;
+            
+            return matchSearch && matchMonth && matchArea && matchProvince && matchStatus;
+        });
+        
+        currentTrainingPage = 1;
+        displayTrainingTable();
+        updateTrainingPagination();
+    }
+    
+    // ฟังก์ชันแสดงตารางการอบรม
+    function displayTrainingTable() {
+        const container = document.getElementById('training-table-container');
+        const startIndex = (currentTrainingPage - 1) * trainingRowsPerPage;
+        const endIndex = startIndex + trainingRowsPerPage;
+        const pageData = filteredTrainingData.slice(startIndex, endIndex);
+        
+        if (pageData.length === 0) {
+            container.innerHTML = '<div class="error">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</div>';
+            return;
+        }
+        
+        let html = '<div style="height: 100%; overflow: auto;"><table>';
+        
+        // Header
+        html += '<thead><tr>';
+        TRAINING_COLUMN_NAMES.forEach(column => {
+            html += `<th>${column}</th>`;
+        });
+        html += '</tr></thead>';
+        
+        // Body
+        html += '<tbody>';
+        pageData.forEach(row => {
+            html += '<tr>';
+            TRAINING_COLUMN_NAMES.forEach(column => {
+                let value = row[column] || '-';
+                let style = '';
+                
+                // สีพิเศษสำหรับ Status ล่าสุด
+                if (column === 'Status ล่าสุด') {
+                    if (value.toLowerCase().includes('สำเร็จ') || value.toLowerCase().includes('ผ่าน')) {
+                        style = 'background: #28a745; color: white; font-weight: bold;';
+                    } else if (value.toLowerCase().includes('ไม่ผ่าน') || value.toLowerCase().includes('fail')) {
+                        style = 'background: #dc3545; color: white; font-weight: bold;';
+                    } else if (value.toLowerCase().includes('รอ') || value.toLowerCase().includes('pending')) {
+                        style = 'background: #ffc107; color: black; font-weight: bold;';
+                    }
+                }
+                
+                html += `<td style="${style}">${value}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        
+        container.innerHTML = html;
+    }
+    
+    // ฟังก์ชันอัพเดท pagination สำหรับการอบรม
+    function updateTrainingPagination() {
+        const totalPages = Math.ceil(filteredTrainingData.length / trainingRowsPerPage);
+        const paginationContainer = document.getElementById('training-pagination');
+        
+        let html = '';
+        
+        // Previous button
+        html += `<button ${currentTrainingPage === 1 ? 'disabled' : ''} onclick="changeTrainingPage(${currentTrainingPage - 1})">‹</button>`;
+        
+        // Page numbers
+        const maxVisible = 5;
+        let startPage = Math.max(1, currentTrainingPage - Math.floor(maxVisible / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        
+        if (endPage - startPage < maxVisible - 1) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<button class="${i === currentTrainingPage ? 'active' : ''}" onclick="changeTrainingPage(${i})">${i}</button>`;
+        }
+        
+        // Next button
+        html += `<button ${currentTrainingPage === totalPages ? 'disabled' : ''} onclick="changeTrainingPage(${currentTrainingPage + 1})">›</button>`;
+        
+        paginationContainer.innerHTML = html;
+    }
+    
+    // ฟังก์ชันเปลี่ยนหน้าสำหรับการอบรม
+    function changeTrainingPage(page) {
+        const totalPages = Math.ceil(filteredTrainingData.length / trainingRowsPerPage);
+        if (page < 1 || page > totalPages) return;
+        
+        currentTrainingPage = page;
+        displayTrainingTable();
+        updateTrainingPagination();
+    }
+    
+    // ฟังก์ชันดาวน์โหลด Excel สำหรับการอบรม
+    function downloadTrainingExcel() {
+        if (filteredTrainingData.length === 0) {
+            alert('ไม่มีข้อมูลที่จะส่งออก');
+            return;
+        }
+        
+        console.log(`📄 ส่งออกข้อมูลการอบรม ${filteredTrainingData.length.toLocaleString()} แถว`);
+        
+        // สร้าง workbook และ worksheet
+        const wb = XLSX.utils.book_new();
+        
+        // เตรียมข้อมูลสำหรับ Excel
+        const excelData = [TRAINING_COLUMN_NAMES]; // Header row
+        
+        // เพิ่มข้อมูลแต่ละแถว
+        filteredTrainingData.forEach(row => {
+            const rowData = TRAINING_COLUMN_NAMES.map(column => row[column] || '');
+            excelData.push(rowData);
+        });
+        
+        // สร้าง worksheet จากข้อมูล
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        // กำหนดความกว้างของคอลัมน์
+        const colWidths = TRAINING_COLUMN_NAMES.map(col => ({
+            wch: Math.max(col.length, 15) // ความกว้างขั้นต่ำ 15 ตัวอักษร
+        }));
+        ws['!cols'] = colWidths;
+        
+        // จัดรูปแบบ header
+        const headerRange = XLSX.utils.decode_range(ws['!ref']);
+        for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+            if (!ws[cellAddress]) continue;
+            
+            // กำหนดรูปแบบ header
+            ws[cellAddress].s = {
+                font: { bold: true, color: { rgb: "FFFFFF" } },
+                fill: { fgColor: { rgb: "2C3E50" } },
+                alignment: { horizontal: "center", vertical: "center" }
+            };
+        }
+        
+        // เพิ่ม worksheet ลง workbook
+        XLSX.utils.book_append_sheet(wb, ws, "สถานะการอบรมช่าง");
+        
+        // สร้างชื่อไฟล์พร้อมวันที่
+        const today = new Date();
+        const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+        const fileName = `สถานะการอบรมช่าง_2025_${dateStr}.xlsx`;
+        
+        // ดาวน์โหลดไฟล์ Excel
+        XLSX.writeFile(wb, fileName);
+    }
+    
+    // ฟังก์ชันเคลียร์การกรองสำหรับการอบรม
+    function clearTrainingFilters() {
+        // เคลียร์ค่าตัวกรอง
+        document.getElementById('training-search-input').value = '';
+        document.getElementById('training-month-filter').value = '';
+        document.getElementById('training-area-filter').value = '';
+        document.getElementById('training-province-filter').value = '';
+        document.getElementById('training-status-filter').value = '';
+        
+        // รีเฟรชข้อมูล
+        filterTrainingData();
+    }
+    
+    // ฟังก์ชันโหลดข้อมูลการอบรม
+    async function loadTrainingData(forceRefresh = false) {
+        try {
+            document.getElementById('training-table-container').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
+            
+            trainingData = await fetchTrainingData(forceRefresh);
+            
+            console.log('📊 ข้อมูลการอบรมหลังการกรอง:', trainingData.length, 'แถว');
+            
+            filteredTrainingData = [...trainingData];
+            
+            // เติมข้อมูลใน filters
+            populateTrainingFilters(trainingData);
+            
+            // แสดงตาราง
+            displayTrainingTable();
+            updateTrainingPagination();
+            
+        } catch (error) {
+            console.error('Error loading training data:', error);
+            document.getElementById('training-table-container').innerHTML = '<div class="error">โหลดข้อมูลไม่ได้: ' + error.message + '</div>';
+        }
+    }
+    
     // Event listeners
     document.addEventListener('DOMContentLoaded', function() {
         // โหลดข้อมูลเมื่อเข้าหน้าข้อมูลช่าง
@@ -1342,7 +1778,14 @@
             }
         });
         
-        // Event listeners สำหรับ controls
+        // โหลดข้อมูลเมื่อเข้าหน้าสถานะการอบรมช่าง
+        document.querySelector('a[href="#training-status"]').addEventListener('click', function() {
+            if (trainingData.length === 0) {
+                loadTrainingData();
+            }
+        });
+        
+        // Event listeners สำหรับ controls ข้อมูลช่าง
         document.getElementById('search-input').addEventListener('input', filterData);
         document.getElementById('provider-filter').addEventListener('change', filterData);
         document.getElementById('type-filter').addEventListener('change', filterData);
@@ -1367,7 +1810,80 @@
         document.getElementById('download-btn').addEventListener('click', downloadExcel);
         
         document.getElementById('clear-filters-btn').addEventListener('click', clearFilters);
+        
+        // Event listeners สำหรับ controls การอบรม
+        document.getElementById('training-search-input').addEventListener('input', filterTrainingData);
+        document.getElementById('training-month-filter').addEventListener('change', filterTrainingData);
+        document.getElementById('training-area-filter').addEventListener('change', filterTrainingData);
+        document.getElementById('training-province-filter').addEventListener('change', filterTrainingData);
+        document.getElementById('training-status-filter').addEventListener('change', filterTrainingData);
+        
+        document.getElementById('training-rows-per-page').addEventListener('change', function() {
+            trainingRowsPerPage = parseInt(this.value);
+            currentTrainingPage = 1;
+            displayTrainingTable();
+            updateTrainingPagination();
+        });
+        
+        document.getElementById('training-refresh-btn').addEventListener('click', function() {
+            // เคลียร์ cache ก่อนรีเฟรช
+            trainingDataCache = null;
+            trainingCacheTime = null;
+            console.log('🗑️ เคลียร์ cache การอบรมแล้ว');
+            loadTrainingData(true);
+        });
+        
+        document.getElementById('training-download-btn').addEventListener('click', downloadTrainingExcel);
+        
+        document.getElementById('training-clear-filters-btn').addEventListener('click', clearTrainingFilters);
+        
+        document.getElementById('training-debug-btn').addEventListener('click', debugTrainingData);
     });
+    
+    // ฟังก์ชันทดสอบการดึงข้อมูลการอบรม
+    async function debugTrainingData() {
+        try {
+            console.clear(); // เคลียร์ console
+            console.log('🧪 เริ่มทดสอบการดึงข้อมูลการอบรม...');
+            
+            // แสดงสถานะการโหลด
+            document.getElementById('training-table-container').innerHTML = '<div class="loading">กำลังทดสอบการดึงข้อมูล...</div>';
+            
+            // เคลียร์ cache เพื่อได้ข้อมูลใหม่
+            trainingDataCache = null;
+            trainingCacheTime = null;
+            
+            // ดึงข้อมูลใหม่
+            const data = await fetchTrainingData(true);
+            
+            console.log('✅ ทดสอบเสร็จสิ้น!');
+            console.log('📊 ผลลัพธ์: ได้ข้อมูล', data.length, 'แถว');
+            
+            // แสดงตัวอย่างข้อมูล
+            if (data.length > 0) {
+                console.log('📋 ตัวอย่างข้อมูล 3 แถวแรก:');
+                data.slice(0, 3).forEach((row, index) => {
+                    console.log(`แถวที่ ${index + 1}:`, row);
+                });
+            }
+            
+            // อัพเดทข้อมูล
+            trainingData = data;
+            filteredTrainingData = [...trainingData];
+            
+            // อัพเดท UI
+            populateTrainingFilters(trainingData);
+            displayTrainingTable();
+            updateTrainingPagination();
+            
+            alert(`ทดสอบเสร็จสิ้น! พบข้อมูล ${data.length} แถว\nตรวจสอบ Console เพื่อดูรายละเอียด`);
+            
+        } catch (error) {
+            console.error('❌ ทดสอบล้มเหลว:', error);
+            alert(`ทดสอบล้มเหลว: ${error.message}\nตรวจสอบ Console เพื่อดูรายละเอียด`);
+            document.getElementById('training-table-container').innerHTML = `<div class="error">ทดสอบล้มเหลว: ${error.message}</div>`;
+        }
+    }
     </script>
     
     <!-- Chart.js สำหรับกราฟ (ถ้าต้องการใช้) -->
