@@ -523,7 +523,7 @@
                 
                 <!-- Chart -->
                 <div class="chart-container">
-                    <h3>จำนวนกองงานแยกตาม RSM</h3>
+                    <h3 style="background-color: #000000; color: #ffffff; padding: 10px; margin: -20px -20px 20px -20px; text-align: center; border-radius: 5px;">จำนวนกองงานแยกตาม RSM</h3>
                     <canvas id="rsm-chart"></canvas>
                 </div>
                 
@@ -576,7 +576,55 @@
         <!-- สถานะการอบรมช่าง -->
         <div id="training-status" class="section">
             <div class="content-section">
-                <h2>สถานะการอบรมช่าง</h2>
+                <h2>สถานะการอบรมช่าง ปี 2025</h2>
+                
+                <!-- Summary Cards -->
+                <div class="stats-cards">
+                    <div class="card">
+                        <h3>จำนวนช่างทั้งหมด</h3>
+                        <div class="number" id="training-total-count">-</div>
+                        <div class="label">คน</div>
+                    </div>
+                    <div class="card install">
+                        <h3>ขึ้นทะเบียนเรียบร้อย</h3>
+                        <div class="number" id="training-success-count">-</div>
+                        <div class="label">คน</div>
+                    </div>
+                    <div class="card repair">
+                        <h3>อยู่ระหว่างอบรม</h3>
+                        <div class="number" id="training-pending-count">-</div>
+                        <div class="label">คน</div>
+                    </div>
+                    <div class="card team">
+                        <h3>เอกสารยังไม่ครบ</h3>
+                        <div class="number" id="training-documents-count">-</div>
+                        <div class="label">คน</div>
+                    </div>
+                    <div class="card" style="border-left-color: #ffc107;">
+                        <h3>ตัวแทนยังไม่ส่งขึ้นทะเบียน</h3>
+                        <div class="number" id="training-not-registered-count" style="color: #ffc107;">-</div>
+                        <div class="label">คน</div>
+                    </div>
+                </div>
+                
+                <!-- Summary Table Toggle -->
+                <div class="controls" style="margin-bottom: 10px;">
+                    <div class="controls-row">
+                        <button id="toggle-summary-table" style="background: #17a2b8; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            📊 แสดง/ซ่อน ตารางสรุปสถานะ
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Summary Table -->
+                <div id="summary-table-section" style="display: none; margin-bottom: 20px;">
+                    <div class="chart-container" style="height: auto; padding: 15px;">
+                        <h3>ตารางสรุปสถานะการอบรมแยกตามพื้นที่และตัวแทน</h3>
+                        <div id="summary-table-container" style="overflow: auto; max-height: 500px;">
+                            <div class="loading">กำลังสร้างตารางสรุป...</div>
+                        </div>
+                    </div>
+                </div>
                 
                 <!-- Controls -->
                 <div class="controls">
@@ -613,7 +661,7 @@
                             <option value="100">100</option>
                             <option value="500">500</option>
                         </select>
-                        แถวต่อหน้า
+                        แถวต่อหน้า | รวม <span id="training-total-rows">0</span> รายการ
                     </div>
                     <div class="pagination" id="training-pagination">
                         <!-- Pagination buttons will be generated here -->
@@ -1527,6 +1575,45 @@
         }
     }
     
+    // ฟังก์ชันคำนวณสถิติการอบรม
+    function calculateTrainingStats(data) {
+        const totalCount = data.length;
+        
+        // นับสถานะต่างๆ ตามรายการใหม่
+        const successCount = data.filter(row => {
+            const status = (row['Status ล่าสุด'] || '').toLowerCase();
+            return status.includes('ขึ้นทะเบียนเรียบร้อย') || status.includes('ขึ้นทะเบียนแล้ว') ||
+                   status.includes('เรียบร้อย') || status.includes('สำเร็จ') || status.includes('ผ่าน');
+        }).length;
+        
+        const pendingCount = data.filter(row => {
+            const status = (row['Status ล่าสุด'] || '').toLowerCase();
+            return status.includes('อยู่ระหว่างอบรมทฤษฎี') || status.includes('อยู่ระหว่างอบรมปฎิบัติ') ||
+                   status.includes('อบรมทฤษฎี') || status.includes('อบรมปฎิบัติ') || 
+                   status.includes('ทฤษฎี') || status.includes('ปฎิบัติ') || status.includes('ปฏิบัติ');
+        }).length;
+        
+        const documentsIncompleteCount = data.filter(row => {
+            const status = (row['Status ล่าสุด'] || '').toLowerCase();
+            return status.includes('เอกสารยังไม่ครบ') || status.includes('เอกสาร') || 
+                   status.includes('ไม่ครบ') || status.includes('ส่งแล้ว') || status.includes('ไม่ส่ง');
+        }).length;
+        
+        const notRegisteredCount = data.filter(row => {
+            const status = (row['Status ล่าสุด'] || '').toLowerCase();
+            return status.includes('ตัวแทนยังไม่ส่งขึ้นทะเบียน') || status.includes('ยังไม่ส่ง') ||
+                   status.includes('ยังไม่ขึ้นทะเบียน') || status.includes('ไม่ขึ้นทะเบียน');
+        }).length;
+        
+        return {
+            totalCount: totalCount.toLocaleString(),
+            successCount: successCount.toLocaleString(),
+            pendingCount: pendingCount.toLocaleString(),
+            documentsIncompleteCount: documentsIncompleteCount.toLocaleString(),
+            notRegisteredCount: notRegisteredCount.toLocaleString()
+        };
+    }
+    
     // ฟังก์ชันสร้างตัวเลือกใน dropdown สำหรับการอบรม
     function populateTrainingFilters(data) {
         const months = [...new Set(data.map(row => row['เดือนอบรม']))].filter(month => month).sort();
@@ -1583,6 +1670,24 @@
             return matchSearch && matchMonth && matchArea && matchProvince && matchStatus;
         });
         
+        // อัพเดทสถิติตามข้อมูลที่กรองแล้ว
+        const stats = calculateTrainingStats(filteredTrainingData);
+        document.getElementById('training-total-count').textContent = stats.totalCount;
+        document.getElementById('training-success-count').textContent = stats.successCount;
+        document.getElementById('training-pending-count').textContent = stats.pendingCount;
+        document.getElementById('training-documents-count').textContent = stats.documentsIncompleteCount;
+        document.getElementById('training-not-registered-count').textContent = stats.notRegisteredCount;
+        
+        // อัพเดทจำนวนแถวทั้งหมด
+        document.getElementById('training-total-rows').textContent = filteredTrainingData.length.toLocaleString();
+        
+        // อัพเดทตารางสรุปถ้าแสดงอยู่
+        const summarySection = document.getElementById('summary-table-section');
+        if (summarySection.style.display !== 'none') {
+            const summaryHtml = generateSummaryTable(filteredTrainingData);
+            document.getElementById('summary-table-container').innerHTML = summaryHtml;
+        }
+        
         currentTrainingPage = 1;
         displayTrainingTable();
         updateTrainingPagination();
@@ -1604,31 +1709,58 @@
         
         // Header
         html += '<thead><tr>';
+        html += '<th style="width: 60px;">#</th>'; // เพิ่มคอลัมน์เลขที่
         TRAINING_COLUMN_NAMES.forEach(column => {
-            html += `<th>${column}</th>`;
+            let width = '';
+            if (column === 'เดือนอบรม') width = 'width: 120px;';
+            else if (column === 'พื้นที่') width = 'width: 100px;';
+            else if (column === 'จังหวัดที่ตั้งร้านตัวแทน') width = 'width: 150px;';
+            else if (column === 'รหัสตัวแทน') width = 'width: 120px;';
+            else if (column === 'บจก./หจก/ร้าน (ตัวแทน)') width = 'width: 200px;';
+            else if (column === 'Status ล่าสุด') width = 'width: 150px;';
+            
+            html += `<th style="${width}">${column}</th>`;
         });
         html += '</tr></thead>';
         
         // Body
         html += '<tbody>';
-        pageData.forEach(row => {
+        pageData.forEach((row, index) => {
+            const rowNumber = startIndex + index + 1;
             html += '<tr>';
+            
+            // เลขที่แถว
+            html += `<td style="text-align: center; font-weight: bold; color: #666;">${rowNumber}</td>`;
+            
             TRAINING_COLUMN_NAMES.forEach(column => {
                 let value = row[column] || '-';
                 let style = '';
                 
                 // สีพิเศษสำหรับ Status ล่าสุด
                 if (column === 'Status ล่าสุด') {
-                    if (value.toLowerCase().includes('สำเร็จ') || value.toLowerCase().includes('ผ่าน')) {
-                        style = 'background: #28a745; color: white; font-weight: bold;';
-                    } else if (value.toLowerCase().includes('ไม่ผ่าน') || value.toLowerCase().includes('fail')) {
-                        style = 'background: #dc3545; color: white; font-weight: bold;';
-                    } else if (value.toLowerCase().includes('รอ') || value.toLowerCase().includes('pending')) {
-                        style = 'background: #ffc107; color: black; font-weight: bold;';
+                    const lowerValue = value.toLowerCase();
+                    if (lowerValue.includes('สำเร็จ') || lowerValue.includes('ผ่าน') || 
+                        lowerValue.includes('ขึ้นทะเบียนแล้ว') || lowerValue.includes('completed')) {
+                        style = 'background: #28a745; color: white; font-weight: bold; border-radius: 4px; padding: 4px 8px; text-align: center;';
+                    } else if (lowerValue.includes('อยู่ระหว่าง') || lowerValue.includes('รอ') || 
+                               lowerValue.includes('pending') || lowerValue.includes('กำลัง')) {
+                        style = 'background: #ffc107; color: black; font-weight: bold; border-radius: 4px; padding: 4px 8px; text-align: center;';
+                    } else if (lowerValue.includes('ยังไม่ขึ้นทะเบียน') || lowerValue.includes('ไม่ผ่าน') ||
+                               lowerValue.includes('not registered') || lowerValue.includes('fail')) {
+                        style = 'background: #dc3545; color: white; font-weight: bold; border-radius: 4px; padding: 4px 8px; text-align: center;';
                     }
                 }
                 
-                html += `<td style="${style}">${value}</td>`;
+                // จัดรูปแบบพิเศษสำหรับคอลัมน์อื่นๆ
+                if (column === 'เดือนอบรม') {
+                    style += 'background: #e3f2fd; font-weight: 600; text-align: center;';
+                } else if (column === 'พื้นที่') {
+                    style += 'background: #f3e5f5; font-weight: 500; text-align: center;';
+                } else if (column === 'รหัสตัวแทน') {
+                    style += 'font-family: monospace; text-align: center; background: #f5f5f5;';
+                }
+                
+                html += `<td style="${style}" title="${value}">${value}</td>`;
             });
             html += '</tr>';
         });
@@ -1756,6 +1888,17 @@
             
             filteredTrainingData = [...trainingData];
             
+            // อัพเดทสถิติทั้งหมด
+            const stats = calculateTrainingStats(trainingData);
+            document.getElementById('training-total-count').textContent = stats.totalCount;
+            document.getElementById('training-success-count').textContent = stats.successCount;
+            document.getElementById('training-pending-count').textContent = stats.pendingCount;
+            document.getElementById('training-documents-count').textContent = stats.documentsIncompleteCount;
+            document.getElementById('training-not-registered-count').textContent = stats.notRegisteredCount;
+            
+            // อัพเดทจำนวนแถวทั้งหมด
+            document.getElementById('training-total-rows').textContent = trainingData.length.toLocaleString();
+            
             // เติมข้อมูลใน filters
             populateTrainingFilters(trainingData);
             
@@ -1763,9 +1906,24 @@
             displayTrainingTable();
             updateTrainingPagination();
             
+            // แสดงข้อความสำเร็จ
+            if (trainingData.length > 0) {
+                console.log('✅ โหลดข้อมูลสำเร็จ!', trainingData.length, 'รายการ');
+            } else {
+                console.warn('⚠️ ไม่พบข้อมูลปี 2025 หรือข้อมูลไม่ตรงตามเงื่อนไข');
+            }
+            
         } catch (error) {
             console.error('Error loading training data:', error);
             document.getElementById('training-table-container').innerHTML = '<div class="error">โหลดข้อมูลไม่ได้: ' + error.message + '</div>';
+            
+            // รีเซ็ตสถิติเป็น 0
+            document.getElementById('training-total-count').textContent = '0';
+            document.getElementById('training-success-count').textContent = '0';
+            document.getElementById('training-pending-count').textContent = '0';
+            document.getElementById('training-documents-count').textContent = '0';
+            document.getElementById('training-not-registered-count').textContent = '0';
+            document.getElementById('training-total-rows').textContent = '0';
         }
     }
     
@@ -1838,6 +1996,8 @@
         document.getElementById('training-clear-filters-btn').addEventListener('click', clearTrainingFilters);
         
         document.getElementById('training-debug-btn').addEventListener('click', debugTrainingData);
+        
+        document.getElementById('toggle-summary-table').addEventListener('click', toggleSummaryTable);
     });
     
     // ฟังก์ชันทดสอบการดึงข้อมูลการอบรม
@@ -1871,8 +2031,13 @@
             trainingData = data;
             filteredTrainingData = [...trainingData];
             
-            // อัพเดท UI
+            // อัพเดทจำนวนแถวทั้งหมด
+            document.getElementById('training-total-rows').textContent = trainingData.length.toLocaleString();
+            
+            // เติมข้อมูลใน filters
             populateTrainingFilters(trainingData);
+            
+            // แสดงตาราง
             displayTrainingTable();
             updateTrainingPagination();
             
@@ -1882,6 +2047,200 @@
             console.error('❌ ทดสอบล้มเหลว:', error);
             alert(`ทดสอบล้มเหลว: ${error.message}\nตรวจสอบ Console เพื่อดูรายละเอียด`);
             document.getElementById('training-table-container').innerHTML = `<div class="error">ทดสอบล้มเหลว: ${error.message}</div>`;
+        }
+    }
+
+    // ฟังก์ชันสร้างตารางสรุปสถานะ
+    function generateSummaryTable(data) {
+        if (data.length === 0) {
+            return '<div class="error">ไม่มีข้อมูลสำหรับสร้างตารางสรุป</div>';
+        }
+
+        // สร้างข้อมูลสรุปแยกตามพื้นที่และตัวแทน
+        const summaryData = {};
+        
+        data.forEach(row => {
+            const month = row['เดือนอบรม'] || 'ไม่ระบุ';
+            const area = row['พื้นที่'] || 'ไม่ระบุ';
+            const province = row['จังหวัดที่ตั้งร้านตัวแทน'] || 'ไม่ระบุ';
+            const agentCode = row['รหัสตัวแทน'] || 'ไม่ระบุ';
+            const companyName = row['บจก./หจก/ร้าน (ตัวแทน)'] || 'ไม่ระบุ';
+            const status = (row['Status ล่าสุด'] || '').trim();
+
+            const key = `${month}|${area}|${province}|${agentCode}|${companyName}`;
+            
+            if (!summaryData[key]) {
+                summaryData[key] = {
+                    เดือนอบรม: month,
+                    พื้นที่: area,
+                    จังหวัดที่ตั้งร้านตัวแทน: province,
+                    รหัสตัวแทน: agentCode,
+                    'บจก./หจก./ร้าน (ตัวแทน)': companyName,
+                    'เอกสารยังไม่ครบ': 0,
+                    'ไม่เข้าอบรม': 0,
+                    'ไม่ผ่านอบรม': 0,
+                    'ขึ้นทะเบียนเรียบร้อย': 0,
+                    'ช่างลาออก': 0,
+                    'ตัวแทนยังไม่ส่งขึ้นทะเบียน': 0,
+                    'ติดประวัติอาชญากรรม': 0,
+                    'อยู่ระหว่างอบรมทฤษฎี': 0,
+                    'อยู่ระหว่างอบรมปฎิบัติ': 0,
+                    'รวมทั้งหมด': 0
+                };
+            }
+
+            // นับจำนวนตามสถานะจากคอลัมน์ AI (Status ล่าสุด)
+            const lowerStatus = status.toLowerCase();
+            
+            if (lowerStatus.includes('เอกสารยังไม่ครบ') || lowerStatus.includes('เอกสาร') || 
+                lowerStatus.includes('ไม่ครบ') || lowerStatus.includes('ส่งแล้ว') || lowerStatus.includes('ไม่ส่ง')) {
+                summaryData[key]['เอกสารยังไม่ครบ']++;
+            } else if (lowerStatus.includes('ไม่เข้าอบรม') || lowerStatus.includes('ไม่เข้า')) {
+                summaryData[key]['ไม่เข้าอบรม']++;
+            } else if (lowerStatus.includes('ไม่ผ่านอบรม') || lowerStatus.includes('ไม่ผ่าน') || 
+                       lowerStatus.includes('ไม่่ผ่าน') || lowerStatus.includes('fail')) {
+                summaryData[key]['ไม่ผ่านอบรม']++;
+            } else if (lowerStatus.includes('ขึ้นทะเบียนเรียบร้อย') || lowerStatus.includes('ขึ้นทะเบียนแล้ว') ||
+                       lowerStatus.includes('เรียบร้อย') || lowerStatus.includes('สำเร็จ') || lowerStatus.includes('ผ่าน')) {
+                summaryData[key]['ขึ้นทะเบียนเรียบร้อย']++;
+            } else if (lowerStatus.includes('ช่างลาออก') || lowerStatus.includes('ลาออก')) {
+                summaryData[key]['ช่างลาออก']++;
+            } else if (lowerStatus.includes('ตัวแทนยังไม่ส่งขึ้นทะเบียน') || lowerStatus.includes('ยังไม่ส่ง') ||
+                       lowerStatus.includes('ยังไม่ขึ้นทะเบียน') || lowerStatus.includes('ไม่ขึ้นทะเบียน')) {
+                summaryData[key]['ตัวแทนยังไม่ส่งขึ้นทะเบียน']++;
+            } else if (lowerStatus.includes('ติดประวัติอาชญากรรม') || lowerStatus.includes('อาชญากรรม') ||
+                       lowerStatus.includes('ประวัติ')) {
+                summaryData[key]['ติดประวัติอาชญากรรม']++;
+            } else if (lowerStatus.includes('อยู่ระหว่างอบรมทฤษฎี') || lowerStatus.includes('อบรมทฤษฎี') ||
+                       lowerStatus.includes('ทฤษฎี')) {
+                summaryData[key]['อยู่ระหว่างอบรมทฤษฎี']++;
+            } else if (lowerStatus.includes('อยู่ระหว่างอบรมปฎิบัติ') || lowerStatus.includes('อบรมปฎิบัติ') ||
+                       lowerStatus.includes('ปฎิบัติ') || lowerStatus.includes('ปฏิบัติ')) {
+                summaryData[key]['อยู่ระหว่างอบรมปฎิบัติ']++;
+            }
+            
+            // รวมยอดทั้งหมด
+            summaryData[key]['รวมทั้งหมด'] = 
+                summaryData[key]['เอกสารยังไม่ครบ'] + 
+                summaryData[key]['ไม่เข้าอบรม'] + 
+                summaryData[key]['ไม่ผ่านอบรม'] + 
+                summaryData[key]['ขึ้นทะเบียนเรียบร้อย'] + 
+                summaryData[key]['ช่างลาออก'] + 
+                summaryData[key]['ตัวแทนยังไม่ส่งขึ้นทะเบียน'] + 
+                summaryData[key]['ติดประวัติอาชญากรรม'] + 
+                summaryData[key]['อยู่ระหว่างอบรมทฤษฎี'] + 
+                summaryData[key]['อยู่ระหว่างอบรมปฎิบัติ'];
+        });
+
+        // แปลงเป็น array และเรียงลำดับ
+        const sortedData = Object.values(summaryData).sort((a, b) => {
+            if (a.พื้นที่ !== b.พื้นที่) return a.พื้นที่.localeCompare(b.พื้นที่);
+            if (a.รหัสตัวแทน !== b.รหัสตัวแทน) return a.รหัสตัวแทน.localeCompare(b.รหัสตัวแทน);
+            return 0;
+        });
+
+        // สร้าง HTML ตาราง
+        let html = '<table style="width: 100%; border-collapse: collapse; font-size: 11px;">';
+        
+        // Header ตามรายการที่ระบุ
+        html += '<thead>';
+        html += '<tr style="background: #2c3e50; color: white; height: 40px;">';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center;">เดือนอบรม</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center;">พื้นที่</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center;">จังหวัดที่ตั้งร้านตัวแทน</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center;">รหัสตัวแทน</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; min-width: 180px;">บจก./หจก./ร้าน (ตัวแทน)</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #6c757d; color: white; min-width: 80px;">เอกสารยังไม่ครบ</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #fd7e14; color: white; min-width: 80px;">ไม่เข้าอบรม</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #dc3545; color: white; min-width: 80px;">ไม่ผ่านอบรม</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #28a745; color: white; min-width: 100px;">ขึ้นทะเบียนเรียบร้อย</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #343a40; color: white; min-width: 80px;">ช่างลาออก</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #ffc107; color: black; min-width: 120px;">ตัวแทนยังไม่ส่งขึ้นทะเบียน</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #6f42c1; color: white; min-width: 100px;">ติดประวัติอาชญากรรม</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #20c997; color: white; min-width: 100px;">อยู่ระหว่างอบรมทฤษฎี</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #17a2b8; color: white; min-width: 100px;">อยู่ระหว่างอบรมปฎิบัติ</th>';
+        html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #495057; font-weight: bold; color: white; min-width: 80px;">Grand Total</th>';
+        html += '</tr>';
+        html += '</thead>';
+
+        // Body
+        html += '<tbody>';
+        let grandTotal = {
+            'เอกสารยังไม่ครบ': 0,
+            'ไม่เข้าอบรม': 0,
+            'ไม่ผ่านอบรม': 0,
+            'ขึ้นทะเบียนเรียบร้อย': 0,
+            'ช่างลาออก': 0,
+            'ตัวแทนยังไม่ส่งขึ้นทะเบียน': 0,
+            'ติดประวัติอาชญากรรม': 0,
+            'อยู่ระหว่างอบรมทฤษฎี': 0,
+            'อยู่ระหว่างอบรมปฎิบัติ': 0,
+            'รวมทั้งหมด': 0
+        };
+
+        sortedData.forEach((row, index) => {
+            html += `<tr style="background: ${index % 2 === 0 ? '#f8f9fa' : 'white'};">`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; background: #e3f2fd; font-weight: 600; font-size: 10px;">${row.เดือนอบรม}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; background: #f3e5f5; font-weight: 500; font-size: 10px;">${row.พื้นที่}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-size: 10px;">${row.จังหวัดที่ตั้งร้านตัวแทน}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-family: monospace; background: #f5f5f5; font-size: 10px;">${row.รหัสตัวแทน}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: left; font-size: 10px;">${row['บจก./หจก./ร้าน (ตัวแทน)']}</td>`;
+            
+            // คอลัมน์สถิติ - แสดงเฉพาะเมื่อมีค่า
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['เอกสารยังไม่ครบ'] > 0 ? row['เอกสารยังไม่ครบ'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['ไม่เข้าอบรม'] > 0 ? row['ไม่เข้าอบรม'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['ไม่ผ่านอบรม'] > 0 ? row['ไม่ผ่านอบรม'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['ขึ้นทะเบียนเรียบร้อย'] > 0 ? row['ขึ้นทะเบียนเรียบร้อย'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['ช่างลาออก'] > 0 ? row['ช่างลาออก'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['ตัวแทนยังไม่ส่งขึ้นทะเบียน'] > 0 ? row['ตัวแทนยังไม่ส่งขึ้นทะเบียน'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['ติดประวัติอาชญากรรม'] > 0 ? row['ติดประวัติอาชญากรรม'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['อยู่ระหว่างอบรมทฤษฎี'] > 0 ? row['อยู่ระหว่างอบรมทฤษฎี'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; font-size: 11px;">${row['อยู่ระหว่างอบรมปฎิบัติ'] > 0 ? row['อยู่ระหว่างอบรมปฎิบัติ'] : ''}</td>`;
+            html += `<td style="border: 1px solid #ddd; padding: 4px; text-align: center; font-weight: bold; background: #e9ecef; font-size: 11px;">${row['รวมทั้งหมด'] > 0 ? row['รวมทั้งหมด'] : ''}</td>`;
+            html += '</tr>';
+
+            // รวมยอดรวม
+            Object.keys(grandTotal).forEach(key => {
+                grandTotal[key] += row[key] || 0;
+            });
+        });
+
+        // แถวยอดรวม
+        html += '<tr style="background: #2c3e50; color: white; font-weight: bold; height: 40px;">';
+        html += '<td colspan="5" style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 13px;">รวมทั้งหมด</td>';
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['เอกสารยังไม่ครบ'] > 0 ? grandTotal['เอกสารยังไม่ครบ'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['ไม่เข้าอบรม'] > 0 ? grandTotal['ไม่เข้าอบรม'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['ไม่ผ่านอบรม'] > 0 ? grandTotal['ไม่ผ่านอบรม'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['ขึ้นทะเบียนเรียบร้อย'] > 0 ? grandTotal['ขึ้นทะเบียนเรียบร้อย'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['ช่างลาออก'] > 0 ? grandTotal['ช่างลาออก'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['ตัวแทนยังไม่ส่งขึ้นทะเบียน'] > 0 ? grandTotal['ตัวแทนยังไม่ส่งขึ้นทะเบียน'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['ติดประวัติอาชญากรรม'] > 0 ? grandTotal['ติดประวัติอาชญากรรม'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['อยู่ระหว่างอบรมทฤษฎี'] > 0 ? grandTotal['อยู่ระหว่างอบรมทฤษฎี'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-size: 12px;">${grandTotal['อยู่ระหว่างอบรมปฎิบัติ'] > 0 ? grandTotal['อยู่ระหว่างอบรมปฎิบัติ'] : ''}</td>`;
+        html += `<td style="border: 1px solid #ddd; padding: 6px; text-align: center; background: #495057; font-size: 12px;">${grandTotal['รวมทั้งหมด']}</td>`;
+        html += '</tr>';
+
+        html += '</tbody>';
+        html += '</table>';
+
+        return html;
+    }
+
+    // ฟังก์ชันแสดง/ซ่อน ตารางสรุป
+    function toggleSummaryTable() {
+        const section = document.getElementById('summary-table-section');
+        const button = document.getElementById('toggle-summary-table');
+        
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+            button.textContent = '📊 ซ่อนตารางสรุปสถานะ';
+            
+            // สร้างตารางสรุป
+            const summaryHtml = generateSummaryTable(filteredTrainingData);
+            document.getElementById('summary-table-container').innerHTML = summaryHtml;
+        } else {
+            section.style.display = 'none';
+            button.textContent = '📊 แสดง/ซ่อน ตารางสรุปสถานะ';
         }
     }
     </script>
