@@ -460,6 +460,7 @@
             <li><a href="#home" onclick="showSection('home')">หน้าหลัก</a></li>
             <li><a href="#remain-group" onclick="showSection('remain-group')" class="active">Remain Par By Group Code</a></li>
             <li><a href="#remain-team" onclick="showSection('remain-team')">Remain Par By Group-Team</a></li>
+            <li><a href="#all-register" onclick="showSection('all-register')">All Register</a></li>
             <li><a href="#technician-register" onclick="showSection('technician-register')">ข้อมูลช่างที่ขึ้นทะเบียน</a></li>
             <li><a href="#training-status" onclick="showSection('training-status')">สถานะการอบรมช่าง</a></li>
         </ul>
@@ -489,6 +490,54 @@
             <div class="content-section">
                 <h2>Remain Par By Group-Team</h2>
                 <p>ข้อมูลจะแสดงที่นี่</p>
+            </div>
+        </div>
+        
+        <!-- All Register -->
+        <div id="all-register" class="section">
+            <div class="content-section">
+                <h2>All Register - ข้อมูลจาก Sheet SumAll</h2>
+                
+                <!-- Controls -->
+                <div class="controls">
+                    <div class="controls-row">
+                        <input type="text" id="all-register-search-input" placeholder="ค้นหา...">
+                        <select id="all-register-province-filter">
+                            <option value="">ทุกจังหวัด</option>
+                        </select>
+                        <select id="all-register-district-filter">
+                            <option value="">ทุกอำเภอ</option>
+                        </select>
+                        <select id="all-register-team-filter">
+                            <option value="">ทุกทีม</option>
+                        </select>
+                    </div>
+                    <div class="controls-row">
+                        <button id="all-register-refresh-btn" class="refresh">รีเฟรชข้อมูล</button>
+                        <button id="all-register-download-btn" class="download">ดาวน์โหลด Excel</button>
+                        <button id="all-register-clear-filters-btn" style="background: #95a5a6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">เคลียร์การกรอง</button>
+                    </div>
+                </div>
+                
+                <!-- Table Controls -->
+                <div class="table-controls">
+                    <div>
+                        แสดง 
+                        <select id="all-register-rows-per-page">
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="500">500</option>
+                        </select>
+                        แถวต่อหน้า | รวม <span id="all-register-total-rows">0</span> รายการ
+                    </div>
+                    <div class="pagination" id="all-register-pagination">
+                        <!-- Pagination buttons will be generated here -->
+                    </div>
+                </div>
+                
+                <!-- Data Table -->
+                <div id="all-register-table-container" class="loading">กำลังโหลดข้อมูล...</div>
             </div>
         </div>
         
@@ -1425,6 +1474,392 @@
         }
     }
     
+    // ===================== All Register =====================
+    
+    // Global variables สำหรับข้อมูล All Register
+    let allRegisterData = [];
+    let filteredAllRegisterData = [];
+    let currentAllRegisterPage = 1;
+    let allRegisterRowsPerPage = 25;
+    let allRegisterDataCache = null;
+    let allRegisterCacheTime = null;
+    
+    // URL สำหรับดึงข้อมูล CSV All Register
+    const ALL_REGISTER_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRyCzbpcRPqchBC11VYAC-yQpa-rtW2e0Sr5h6OeIYLqbsUJIZUgs5wE-u_vLvQJegGiGq-SU8aqPTc/pub?gid=549272929&single=true&output=csv';
+    
+    // คอลัมน์ที่ต้องการสำหรับ All Register (เฉพาะคอลัมน์ A,B,C,D,E)
+    const ALL_REGISTER_REQUIRED_COLUMNS = [0, 1, 2, 3, 4]; // A,B,C,D,E
+    const ALL_REGISTER_COLUMN_NAMES = ['PROVINCE', 'DISTRICT', 'TEAM_NAME', 'SUB_ID', 'Qty ORDER_NO'];
+    
+    // ฟังก์ชันดึงข้อมูล All Register จาก CSV
+    async function fetchAllRegisterData(forceRefresh = false) {
+        // ตรวจสอบ cache
+        if (!forceRefresh && allRegisterDataCache && allRegisterCacheTime && (Date.now() - allRegisterCacheTime < CACHE_DURATION)) {
+            return allRegisterDataCache;
+        }
+        
+        try {
+            console.log('🔗 กำลังดึงข้อมูล All Register จาก:', ALL_REGISTER_CSV_URL);
+            
+            const response = await fetch(ALL_REGISTER_CSV_URL, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache',
+                headers: {
+                    'Accept': 'text/csv,text/plain,*/*'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const csvText = await response.text();
+            console.log('📄 ได้รับข้อมูล All Register CSV, ขนาด:', csvText.length, 'ตัวอักษร');
+            
+            if (!csvText || csvText.trim().length === 0) {
+                throw new Error('ไม่มีข้อมูลใน CSV');
+            }
+            
+            const allData = parseCSV(csvText);
+            console.log('📚 ข้อมูล All Register ทั้งหมด:', allData.length, 'แถว');
+            
+            if (allData.length < 2) {
+                throw new Error('ข้อมูลไม่เพียงพอ (ต้องมีอย่างน้อย 2 แถว)');
+            }
+            
+            // ข้ามหัวข้อ (แถวแรก) และกรองข้อมูล
+            const processedData = allData.slice(1).filter((row, index) => {
+                // ตรวจสอบว่าแถวมีข้อมูลเพียงพอ
+                if (row.length < Math.max(...ALL_REGISTER_REQUIRED_COLUMNS) + 1) {
+                    if (index < 5) {
+                        console.log(`❌ แถวที่ ${index + 2}: ไม่มีคอลัมน์เพียงพอ (มี ${row.length} ต้องการ ${Math.max(...ALL_REGISTER_REQUIRED_COLUMNS) + 1})`);
+                    }
+                    return false;
+                }
+                
+                // ข้ามแถว Total
+                const province = (row[0] || '').toString().trim();
+                if (province.toLowerCase().includes('total')) {
+                    console.log(`❌ แถวที่ ${index + 2}: ข้ามแถว Total`);
+                    return false;
+                }
+                
+                // ตรวจสอบว่ามีข้อมูลครบถ้วน
+                const hasValidData = ALL_REGISTER_REQUIRED_COLUMNS.some(colIndex => {
+                    const value = (row[colIndex] || '').toString().trim();
+                    return value && value !== '';
+                });
+                
+                if (!hasValidData) {
+                    if (index < 5) {
+                        console.log(`❌ แถวที่ ${index + 2}: ไม่มีข้อมูลที่จำเป็น`);
+                    }
+                    return false;
+                }
+                
+                if (index < 5) {
+                    console.log(`✅ แถวที่ ${index + 2}: ข้อมูลผ่านการกรอง`);
+                }
+                return true;
+            }).map((row, index) => {
+                // เลือกเฉพาะคอลัมน์ที่ต้องการ
+                const selectedData = {};
+                ALL_REGISTER_REQUIRED_COLUMNS.forEach((colIndex, i) => {
+                    const value = (row[colIndex] || '').toString().trim();
+                    selectedData[ALL_REGISTER_COLUMN_NAMES[i]] = value;
+                });
+                
+                if (index < 3) {
+                    console.log(`📊 ข้อมูล All Register ที่ประมวลผลแล้วแถวที่ ${index + 1}:`, selectedData);
+                }
+                
+                return selectedData;
+            });
+            
+            console.log('📊 ข้อมูล All Register หลังการกรอง:', processedData.length, 'แถว');
+            
+            // เก็บ cache
+            allRegisterDataCache = processedData;
+            allRegisterCacheTime = Date.now();
+            
+            return processedData;
+        } catch (error) {
+            console.error('❌ Error fetching All Register CSV data:', error);
+            throw new Error(`ไม่สามารถดึงข้อมูลได้: ${error.message}`);
+        }
+    }
+    
+    // ฟังก์ชันสร้างตัวเลือกใน dropdown สำหรับ All Register
+    function populateAllRegisterFilters(data) {
+        const provinces = [...new Set(data.map(row => row['PROVINCE']))].filter(province => province).sort();
+        const districts = [...new Set(data.map(row => row['DISTRICT']))].filter(district => district).sort();
+        const teams = [...new Set(data.map(row => row['TEAM_NAME']))].filter(team => team).sort();
+        
+        populateAllRegisterSelect('all-register-province-filter', provinces);
+        populateAllRegisterSelect('all-register-district-filter', districts);
+        populateAllRegisterSelect('all-register-team-filter', teams);
+    }
+    
+    function populateAllRegisterSelect(selectId, options) {
+        const select = document.getElementById(selectId);
+        const currentValue = select.value;
+        
+        // เคลียร์ options เก่า (ยกเว้น option แรก)
+        while (select.children.length > 1) {
+            select.removeChild(select.lastChild);
+        }
+        
+        // เพิ่ม options ใหม่
+        options.forEach(option => {
+            if (option) {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                select.appendChild(optionElement);
+            }
+        });
+        
+        // คืนค่าเดิม
+        select.value = currentValue;
+    }
+    
+    // ฟังก์ชันกรองข้อมูล All Register
+    function filterAllRegisterData() {
+        const searchTerm = document.getElementById('all-register-search-input').value.toLowerCase();
+        const provinceFilter = document.getElementById('all-register-province-filter').value;
+        const districtFilter = document.getElementById('all-register-district-filter').value;
+        const teamFilter = document.getElementById('all-register-team-filter').value;
+        
+        filteredAllRegisterData = allRegisterData.filter(row => {
+            const matchSearch = !searchTerm || Object.values(row).some(value => 
+                value.toString().toLowerCase().includes(searchTerm)
+            );
+            const matchProvince = !provinceFilter || row['PROVINCE'] === provinceFilter;
+            const matchDistrict = !districtFilter || row['DISTRICT'] === districtFilter;
+            const matchTeam = !teamFilter || row['TEAM_NAME'] === teamFilter;
+            
+            return matchSearch && matchProvince && matchDistrict && matchTeam;
+        });
+        
+        // อัพเดทจำนวนแถวทั้งหมด
+        document.getElementById('all-register-total-rows').textContent = filteredAllRegisterData.length.toLocaleString();
+        
+        currentAllRegisterPage = 1;
+        displayAllRegisterTable();
+        updateAllRegisterPagination();
+    }
+    
+    // ฟังก์ชันแสดงตาราง All Register
+    function displayAllRegisterTable() {
+        const container = document.getElementById('all-register-table-container');
+        const startIndex = (currentAllRegisterPage - 1) * allRegisterRowsPerPage;
+        const endIndex = startIndex + allRegisterRowsPerPage;
+        const pageData = filteredAllRegisterData.slice(startIndex, endIndex);
+        
+        if (pageData.length === 0) {
+            container.innerHTML = '<div class="error">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</div>';
+            return;
+        }
+        
+        let html = '<div style="height: 100%; overflow: auto;"><table>';
+        
+        // Header
+        html += '<thead><tr>';
+        html += '<th style="width: 60px;">#</th>'; // เพิ่มคอลัมน์เลขที่
+        ALL_REGISTER_COLUMN_NAMES.forEach(column => {
+            let width = '';
+            if (column === 'PROVINCE') width = 'width: 120px;';
+            else if (column === 'DISTRICT') width = 'width: 120px;';
+            else if (column === 'TEAM_NAME') width = 'width: 200px;';
+            else if (column === 'SUB_ID') width = 'width: 120px;';
+            else if (column === 'Qty ORDER_NO') width = 'width: 100px;';
+            
+            html += `<th style="${width}">${column}</th>`;
+        });
+        html += '</tr></thead>';
+        
+        // Body
+        html += '<tbody>';
+        pageData.forEach((row, index) => {
+            const rowNumber = startIndex + index + 1;
+            html += '<tr>';
+            
+            // เลขที่แถว
+            html += `<td style="text-align: center; font-weight: bold; color: #666;">${rowNumber}</td>`;
+            
+            ALL_REGISTER_COLUMN_NAMES.forEach(column => {
+                let value = row[column] || '-';
+                let style = '';
+                
+                // จัดรูปแบบพิเศษสำหรับคอลัมน์ต่างๆ
+                if (column === 'PROVINCE') {
+                    style += 'background: #e3f2fd; font-weight: 600; text-align: center;';
+                } else if (column === 'DISTRICT') {
+                    style += 'background: #f3e5f5; font-weight: 500; text-align: center;';
+                } else if (column === 'SUB_ID') {
+                    style += 'font-family: monospace; text-align: center; background: #f5f5f5;';
+                } else if (column === 'Qty ORDER_NO') {
+                    style += 'text-align: center; font-weight: bold; color: #2c3e50;';
+                    // จัดรูปแบบตัวเลข
+                    if (!isNaN(value) && value !== '' && value !== '-') {
+                        value = parseInt(value).toLocaleString();
+                    }
+                }
+                
+                html += `<td style="${style}" title="${value}">${value}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        
+        container.innerHTML = html;
+    }
+    
+    // ฟังก์ชันอัพเดท pagination สำหรับ All Register
+    function updateAllRegisterPagination() {
+        const totalPages = Math.ceil(filteredAllRegisterData.length / allRegisterRowsPerPage);
+        const paginationContainer = document.getElementById('all-register-pagination');
+        
+        let html = '';
+        
+        // Previous button
+        html += `<button ${currentAllRegisterPage === 1 ? 'disabled' : ''} onclick="changeAllRegisterPage(${currentAllRegisterPage - 1})">‹</button>`;
+        
+        // Page numbers
+        const maxVisible = 5;
+        let startPage = Math.max(1, currentAllRegisterPage - Math.floor(maxVisible / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        
+        if (endPage - startPage < maxVisible - 1) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<button class="${i === currentAllRegisterPage ? 'active' : ''}" onclick="changeAllRegisterPage(${i})">${i}</button>`;
+        }
+        
+        // Next button
+        html += `<button ${currentAllRegisterPage === totalPages ? 'disabled' : ''} onclick="changeAllRegisterPage(${currentAllRegisterPage + 1})">›</button>`;
+        
+        paginationContainer.innerHTML = html;
+    }
+    
+    // ฟังก์ชันเปลี่ยนหน้าสำหรับ All Register
+    function changeAllRegisterPage(page) {
+        const totalPages = Math.ceil(filteredAllRegisterData.length / allRegisterRowsPerPage);
+        if (page < 1 || page > totalPages) return;
+        
+        currentAllRegisterPage = page;
+        displayAllRegisterTable();
+        updateAllRegisterPagination();
+    }
+    
+    // ฟังก์ชันดาวน์โหลด Excel สำหรับ All Register
+    function downloadAllRegisterExcel() {
+        if (filteredAllRegisterData.length === 0) {
+            alert('ไม่มีข้อมูลที่จะส่งออก');
+            return;
+        }
+        
+        console.log(`📄 ส่งออกข้อมูล All Register ${filteredAllRegisterData.length.toLocaleString()} แถว`);
+        
+        // สร้าง workbook และ worksheet
+        const wb = XLSX.utils.book_new();
+        
+        // เตรียมข้อมูลสำหรับ Excel
+        const excelData = [ALL_REGISTER_COLUMN_NAMES]; // Header row
+        
+        // เพิ่มข้อมูลแต่ละแถว
+        filteredAllRegisterData.forEach(row => {
+            const rowData = ALL_REGISTER_COLUMN_NAMES.map(column => row[column] || '');
+            excelData.push(rowData);
+        });
+        
+        // สร้าง worksheet จากข้อมูล
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        // กำหนดความกว้างของคอลัมน์
+        const colWidths = ALL_REGISTER_COLUMN_NAMES.map(col => ({
+            wch: Math.max(col.length, 15) // ความกว้างขั้นต่ำ 15 ตัวอักษร
+        }));
+        ws['!cols'] = colWidths;
+        
+        // จัดรูปแบบ header
+        const headerRange = XLSX.utils.decode_range(ws['!ref']);
+        for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+            if (!ws[cellAddress]) continue;
+            
+            // กำหนดรูปแบบ header
+            ws[cellAddress].s = {
+                font: { bold: true, color: { rgb: "FFFFFF" } },
+                fill: { fgColor: { rgb: "2C3E50" } },
+                alignment: { horizontal: "center", vertical: "center" }
+            };
+        }
+        
+        // เพิ่ม worksheet ลง workbook
+        XLSX.utils.book_append_sheet(wb, ws, "All Register");
+        
+        // สร้างชื่อไฟล์พร้อมวันที่
+        const today = new Date();
+        const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+        const fileName = `All_Register_SumAll_${dateStr}.xlsx`;
+        
+        // ดาวน์โหลดไฟล์ Excel
+        XLSX.writeFile(wb, fileName);
+    }
+    
+    // ฟังก์ชันเคลียร์การกรองสำหรับ All Register
+    function clearAllRegisterFilters() {
+        // เคลียร์ค่าตัวกรอง
+        document.getElementById('all-register-search-input').value = '';
+        document.getElementById('all-register-province-filter').value = '';
+        document.getElementById('all-register-district-filter').value = '';
+        document.getElementById('all-register-team-filter').value = '';
+        
+        // รีเฟรชข้อมูล
+        filterAllRegisterData();
+    }
+    
+    // ฟังก์ชันโหลดข้อมูล All Register
+    async function loadAllRegisterData(forceRefresh = false) {
+        try {
+            document.getElementById('all-register-table-container').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
+            
+            allRegisterData = await fetchAllRegisterData(forceRefresh);
+            
+            console.log('📊 ข้อมูล All Register หลังการกรอง:', allRegisterData.length, 'แถว');
+            
+            filteredAllRegisterData = [...allRegisterData];
+            
+            // อัพเดทจำนวนแถวทั้งหมด
+            document.getElementById('all-register-total-rows').textContent = allRegisterData.length.toLocaleString();
+            
+            // เติมข้อมูลใน filters
+            populateAllRegisterFilters(allRegisterData);
+            
+            // แสดงตาราง
+            displayAllRegisterTable();
+            updateAllRegisterPagination();
+            
+            // แสดงข้อความสำเร็จ
+            if (allRegisterData.length > 0) {
+                console.log('✅ โหลดข้อมูล All Register สำเร็จ!', allRegisterData.length, 'รายการ');
+            } else {
+                console.warn('⚠️ ไม่พบข้อมูลหรือข้อมูลไม่ตรงตามเงื่อนไข');
+            }
+            
+        } catch (error) {
+            console.error('Error loading All Register data:', error);
+            document.getElementById('all-register-table-container').innerHTML = '<div class="error">โหลดข้อมูลไม่ได้: ' + error.message + '</div>';
+            
+            // รีเซ็ตจำนวนแถว
+            document.getElementById('all-register-total-rows').textContent = '0';
+        }
+    }
+    
     // ===================== สถานะการอบรมช่าง =====================
     
     // Global variables สำหรับข้อมูลการอบรม
@@ -1936,6 +2371,13 @@
             }
         });
         
+        // โหลดข้อมูลเมื่อเข้าหน้า All Register
+        document.querySelector('a[href="#all-register"]').addEventListener('click', function() {
+            if (allRegisterData.length === 0) {
+                loadAllRegisterData();
+            }
+        });
+        
         // โหลดข้อมูลเมื่อเข้าหน้าสถานะการอบรมช่าง
         document.querySelector('a[href="#training-status"]').addEventListener('click', function() {
             if (trainingData.length === 0) {
@@ -1968,6 +2410,31 @@
         document.getElementById('download-btn').addEventListener('click', downloadExcel);
         
         document.getElementById('clear-filters-btn').addEventListener('click', clearFilters);
+        
+        // Event listeners สำหรับ controls All Register
+        document.getElementById('all-register-search-input').addEventListener('input', filterAllRegisterData);
+        document.getElementById('all-register-province-filter').addEventListener('change', filterAllRegisterData);
+        document.getElementById('all-register-district-filter').addEventListener('change', filterAllRegisterData);
+        document.getElementById('all-register-team-filter').addEventListener('change', filterAllRegisterData);
+        
+        document.getElementById('all-register-rows-per-page').addEventListener('change', function() {
+            allRegisterRowsPerPage = parseInt(this.value);
+            currentAllRegisterPage = 1;
+            displayAllRegisterTable();
+            updateAllRegisterPagination();
+        });
+        
+        document.getElementById('all-register-refresh-btn').addEventListener('click', function() {
+            // เคลียร์ cache ก่อนรีเฟรช
+            allRegisterDataCache = null;
+            allRegisterCacheTime = null;
+            console.log('🗑️ เคลียร์ cache All Register แล้ว');
+            loadAllRegisterData(true);
+        });
+        
+        document.getElementById('all-register-download-btn').addEventListener('click', downloadAllRegisterExcel);
+        
+        document.getElementById('all-register-clear-filters-btn').addEventListener('click', clearAllRegisterFilters);
         
         // Event listeners สำหรับ controls การอบรม
         document.getElementById('training-search-input').addEventListener('input', filterTrainingData);
