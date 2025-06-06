@@ -492,6 +492,8 @@
                         <button id="home-download-btn" class="download">ดาวน์โหลด Excel</button>
                         <button id="home-clear-filters-btn" style="background: #95a5a6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">เคลียร์การกรอง</button>
                         <button id="home-debug-btn" style="background: #9b59b6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">🔧 ทดสอบ API</button>
+                        <button id="home-debug-data-btn" style="background: #e74c3c; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">🐛 Debug ข้อมูล</button>
+                        <button id="home-structure-debug-btn" style="background: #f39c12; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">🔬 ดูโครงสร้าง</button>
                     </div>
                 </div>
                 
@@ -854,25 +856,50 @@
             
             const rowData = json.sheets[0].data[0].rowData;
             console.log('📊 ข้อมูลทั้งหมด:', rowData.length, 'แถว');
+            console.log('🔍 โครงสร้าง rowData แถวแรก:', rowData[0]);
+            console.log('🔍 ตรวจสอบ 5 แถวแรก:');
+            
+            for (let i = 0; i < Math.min(5, rowData.length); i++) {
+                console.log(`แถวที่ ${i + 1}:`, {
+                    hasValues: !!rowData[i]?.values,
+                    valuesLength: rowData[i]?.values?.length || 0,
+                    firstFewValues: rowData[i]?.values?.slice(0, 5)?.map(cell => cell?.formattedValue) || []
+                });
+            }
             
             if (rowData.length < 2) {
                 throw new Error('ข้อมูลไม่เพียงพอ');
             }
             
-            // ดึงหัวข้อจากแถวแรก
-            const headerRow = rowData[0];
-            if (!headerRow.values) {
-                throw new Error('ไม่พบหัวข้อ');
+            // หาแถวที่มี values สำหรับเป็น header
+            let headerRow = null;
+            let headerRowIndex = -1;
+            
+            for (let i = 0; i < Math.min(5, rowData.length); i++) {
+                if (rowData[i] && rowData[i].values && rowData[i].values.length > 0) {
+                    headerRow = rowData[i];
+                    headerRowIndex = i;
+                    console.log(`✅ พบ header ที่แถวที่ ${i + 1}`);
+                    break;
+                }
+            }
+            
+            if (!headerRow || !headerRow.values) {
+                console.error('❌ ไม่พบ header ใน 5 แถวแรก');
+                console.error('📋 โครงสร้างข้อมูล rowData:', rowData.slice(0, 5));
+                throw new Error('ไม่พบหัวข้อ - ไม่มีแถวที่มี values ใน 5 แถวแรก');
             }
             
             const headers = headerRow.values.map(cell => cell.formattedValue || '');
             console.log('📋 หัวข้อ:', headers);
             
-            // หาตำแหน่งคอลัมน์ที่ต้องการ
-            const rsmIndex = headers.findIndex(h => h.includes('RSM'));
-            const provinceIndex = headers.findIndex(h => h.includes('PROVINCE'));
-            const groupCodeIndex = headers.findIndex(h => h.includes('GROUP_CODE'));
-            const groupNameIndex = headers.findIndex(h => h.includes('GROUP_NAME'));
+            // หาตำแหน่งคอลัมน์ที่ต้องการ (ปรับให้ยืดหยุ่นมากขึ้น)
+            console.log('🔍 หัวข้อทั้งหมด:', headers);
+            
+            const rsmIndex = headers.findIndex(h => h && (h.includes('RSM') || h.toLowerCase().includes('rsm')));
+            const provinceIndex = headers.findIndex(h => h && (h.includes('PROVINCE') || h.includes('Province') || h.includes('จังหวัด')));
+            const groupCodeIndex = headers.findIndex(h => h && (h.includes('GROUP_CODE') || h.includes('Group Code') || h.includes('รหัสกลุ่ม')));
+            const groupNameIndex = headers.findIndex(h => h && (h.includes('GROUP_NAME') || h.includes('Group Name') || h.includes('ชื่อกลุ่ม')));
             
             console.log('🎯 ตำแหน่งคอลัมน์:', {
                 RSM: rsmIndex,
@@ -881,17 +908,59 @@
                 GROUP_NAME: groupNameIndex
             });
             
+            // ถ้าหาไม่เจอ ให้ลองหาแบบ flexible มากขึ้น
             if (rsmIndex === -1 || provinceIndex === -1 || groupCodeIndex === -1 || groupNameIndex === -1) {
-                throw new Error('ไม่พบคอลัมน์ที่จำเป็น');
+                console.log('⚠️ หาคอลัมน์แบบเข้มงวดไม่เจอ ลองใหม่แบบ flexible...');
+                
+                // หาแบบ flexible ขึ้น
+                const flexibleRsmIndex = headers.findIndex(h => h && h.toLowerCase().includes('rsm'));
+                const flexibleProvinceIndex = headers.findIndex(h => h && (h.toLowerCase().includes('province') || h.includes('จังหวัด')));
+                const flexibleGroupCodeIndex = headers.findIndex(h => h && (h.toLowerCase().includes('group') && h.toLowerCase().includes('code')));
+                const flexibleGroupNameIndex = headers.findIndex(h => h && (h.toLowerCase().includes('group') && h.toLowerCase().includes('name')));
+                
+                console.log('🔄 ตำแหน่งคอลัมน์ (flexible):', {
+                    RSM: flexibleRsmIndex,
+                    PROVINCE: flexibleProvinceIndex,
+                    GROUP_CODE: flexibleGroupCodeIndex,
+                    GROUP_NAME: flexibleGroupNameIndex
+                });
+                
+                // หาคอลัมน์แบบดูจากลำดับ (fallback)
+                if (flexibleRsmIndex === -1 || flexibleProvinceIndex === -1 || flexibleGroupCodeIndex === -1 || flexibleGroupNameIndex === -1) {
+                    console.log('⚠️ หาคอลัมน์ไม่เจอ ใช้ลำดับตามตำแหน่ง...');
+                    
+                    // สมมติตำแหน่งตามลำดับที่พบบ่อย
+                    const fallbackRsmIndex = headers.findIndex((h, i) => i < 10 && h); // ตำแหน่งแรกๆ
+                    const fallbackProvinceIndex = headers.findIndex((h, i) => i < 10 && h && i !== fallbackRsmIndex);
+                    const fallbackGroupCodeIndex = headers.findIndex((h, i) => i < 10 && h && i !== fallbackRsmIndex && i !== fallbackProvinceIndex);
+                    const fallbackGroupNameIndex = headers.findIndex((h, i) => i < 10 && h && i !== fallbackRsmIndex && i !== fallbackProvinceIndex && i !== fallbackGroupCodeIndex);
+                    
+                    console.log('📋 รายการหัวข้อ 10 ตัวแรก:');
+                    headers.slice(0, 10).forEach((h, i) => {
+                        console.log(`คอลัมน์ ${i}: "${h}"`);
+                    });
+                    
+                    throw new Error(`ไม่พบคอลัมน์ที่จำเป็น\nหัวข้อที่พบ: ${headers.slice(0, 10).join(', ')}`);
+                }
+                
+                // ใช้ค่า flexible
+                homeColumns = [
+                    { name: 'RSM', index: flexibleRsmIndex },
+                    { name: 'PROVINCE', index: flexibleProvinceIndex },
+                    { name: 'GROUP_CODE', index: flexibleGroupCodeIndex },
+                    { name: 'GROUP_NAME', index: flexibleGroupNameIndex }
+                ];
+            } else {
+                // ใช้ค่าปกติ
+                homeColumns = [
+                    { name: 'RSM', index: rsmIndex },
+                    { name: 'PROVINCE', index: provinceIndex },
+                    { name: 'GROUP_CODE', index: groupCodeIndex },
+                    { name: 'GROUP_NAME', index: groupNameIndex }
+                ];
             }
             
-            // สร้างรายการคอลัมน์ที่จะแสดง
-            homeColumns = [
-                { name: 'RSM', index: rsmIndex },
-                { name: 'PROVINCE', index: provinceIndex },
-                { name: 'GROUP_CODE', index: groupCodeIndex },
-                { name: 'GROUP_NAME', index: groupNameIndex }
-            ];
+            console.log('✅ ใช้คอลัมน์:', homeColumns);
             
             // หาคอลัมน์อื่นๆ ที่มีเซลล์สีดำ (ค่า 0)
             blackCellColumns = [];
@@ -929,16 +998,27 @@
             // ประมวลผลข้อมูล
             const processedData = [];
             
-            for (let rowIndex = 1; rowIndex < rowData.length; rowIndex++) {
+            console.log('🔄 เริ่มประมวลผลข้อมูล:', rowData.length, 'แถว');
+            console.log('🔄 เริ่มจากแถวที่:', headerRowIndex + 2, '(ข้าม header)');
+            
+            for (let rowIndex = headerRowIndex + 1; rowIndex < rowData.length; rowIndex++) {
                 const row = rowData[rowIndex];
-                if (!row.values) continue;
+                if (!row.values) {
+                    if (rowIndex < 5) console.log(`❌ แถวที่ ${rowIndex + 1}: ไม่มี values`);
+                    continue;
+                }
                 
                 const rowObj = {};
                 
                 // เพิ่มคอลัมน์พื้นฐาน
                 homeColumns.forEach(col => {
                     const cell = row.values[col.index];
-                    rowObj[col.name] = cell ? (cell.formattedValue || '') : '';
+                    const value = cell ? (cell.formattedValue || '') : '';
+                    rowObj[col.name] = value;
+                    
+                    if (rowIndex < 3) { // debug แถวแรกๆ
+                        console.log(`แถวที่ ${rowIndex + 1}, ${col.name}[${col.index}]:`, value);
+                    }
                 });
                 
                 // เพิ่มคอลัมน์ที่มีเซลล์สีดำ เฉพาะที่มีค่า 0
@@ -960,10 +1040,28 @@
                 
                 if (hasBasicData) {
                     processedData.push(rowObj);
+                    if (rowIndex < 3) { // debug แถวแรกๆ
+                        console.log(`✅ แถวที่ ${rowIndex + 1} ผ่าน:`, rowObj);
+                    }
+                } else {
+                    if (rowIndex < 10) { // debug แถวแรกๆ
+                        console.log(`❌ แถวที่ ${rowIndex + 1} ไม่ผ่าน (ไม่มีข้อมูลพื้นฐาน):`, rowObj);
+                    }
                 }
             }
             
             console.log('✅ ประมวลผลข้อมูลเสร็จ:', processedData.length, 'แถว');
+            
+            if (processedData.length === 0) {
+                throw new Error('ไม่มีข้อมูลที่ประมวลผลได้ - อาจเป็นเพราะหาคอลัมน์ไม่เจอหรือข้อมูลว่าง');
+            }
+            
+            // แสดงตัวอย่างข้อมูลที่ประมวลผลแล้ว
+            console.log('📋 ตัวอย่างข้อมูลที่ประมวลผลแล้ว (3 แถวแรก):');
+            processedData.slice(0, 3).forEach((row, index) => {
+                console.log(`แถวที่ ${index + 1}:`, row);
+            });
+            
             return processedData;
             
         } catch (error) {
@@ -1224,6 +1322,124 @@
         
         // รีเฟรชข้อมูล
         filterHomeData();
+    }
+    
+    // ฟังก์ชันทดสอบโครงสร้างข้อมูลอย่างละเอียด
+    async function debugDataStructure() {
+        try {
+            console.clear();
+            console.log('🔬 เริ่มทดสอบโครงสร้างข้อมูล...');
+            
+            document.getElementById('home-table-container').innerHTML = '<div class="loading">กำลังตรวจสอบโครงสร้างข้อมูล...</div>';
+            
+            const response = await fetch('https://blackpar.onrender.com/sheet-data');
+            const json = await response.json();
+            
+            console.log('🏗️ โครงสร้าง JSON ระดับสูงสุด:');
+            console.log('- Type:', typeof json);
+            console.log('- Keys:', Object.keys(json));
+            console.log('- Full object:', json);
+            
+            if (json.sheets) {
+                console.log('📋 ข้อมูล sheets:');
+                console.log('- จำนวน sheets:', json.sheets.length);
+                console.log('- Sheet แรก keys:', Object.keys(json.sheets[0] || {}));
+                console.log('- Sheet แรก:', json.sheets[0]);
+                
+                if (json.sheets[0]?.data) {
+                    console.log('📊 ข้อมูล data:');
+                    console.log('- จำนวน data elements:', json.sheets[0].data.length);
+                    console.log('- Data แรก keys:', Object.keys(json.sheets[0].data[0] || {}));
+                    console.log('- Data แรก:', json.sheets[0].data[0]);
+                    
+                    if (json.sheets[0].data[0]?.rowData) {
+                        console.log('📝 ข้อมูล rowData:');
+                        const rowData = json.sheets[0].data[0].rowData;
+                        console.log('- จำนวน rows:', rowData.length);
+                        console.log('- ตัวอย่าง 10 แถวแรก:');
+                        
+                        for (let i = 0; i < Math.min(10, rowData.length); i++) {
+                            const row = rowData[i];
+                            console.log(`  แถวที่ ${i + 1}:`, {
+                                exists: !!row,
+                                hasValues: !!row?.values,
+                                valuesCount: row?.values?.length || 0,
+                                sampleValues: row?.values?.slice(0, 3)?.map(cell => ({
+                                    formattedValue: cell?.formattedValue,
+                                    hasFormat: !!cell?.effectiveFormat
+                                })) || []
+                            });
+                        }
+                        
+                        // หาแถวแรกที่มี values
+                        let firstRowWithValues = null;
+                        let firstRowIndex = -1;
+                        for (let i = 0; i < rowData.length; i++) {
+                            if (rowData[i]?.values?.length > 0) {
+                                firstRowWithValues = rowData[i];
+                                firstRowIndex = i;
+                                break;
+                            }
+                        }
+                        
+                        if (firstRowWithValues) {
+                            console.log(`📌 แถวแรกที่มีข้อมูล (แถวที่ ${firstRowIndex + 1}):`);
+                            console.log('- จำนวนคอลัมน์:', firstRowWithValues.values.length);
+                            console.log('- ข้อมูลทั้งหมด:');
+                            firstRowWithValues.values.forEach((cell, index) => {
+                                console.log(`  คอลัมน์ ${index + 1}: "${cell?.formattedValue || '(ว่าง)'}"`);
+                            });
+                        }
+                    }
+                }
+            }
+            
+            alert(`🔬 ตรวจสอบโครงสร้างเสร็จสิ้น!\nตรวจสอบ Console เพื่อดูรายละเอียดครับ`);
+            
+        } catch (error) {
+            console.error('❌ ตรวจสอบโครงสร้างล้มเหลว:', error);
+            alert(`❌ ตรวจสอบโครงสร้างล้มเหลว: ${error.message}`);
+            document.getElementById('home-table-container').innerHTML = `<div class="error">ตรวจสอบโครงสร้างล้มเหลว: ${error.message}</div>`;
+        }
+    }
+    
+    // ฟังก์ชันทดสอบการประมวลผลข้อมูลโดยเฉพาะ
+    async function debugHomeDataProcessing() {
+        try {
+            console.clear();
+            console.log('🐛 เริ่มทดสอบการประมวลผลข้อมูล...');
+            
+            document.getElementById('home-table-container').innerHTML = '<div class="loading">กำลัง Debug การประมวลผลข้อมูล...</div>';
+            
+            homeData = await fetchHomeData();
+            
+            console.log('✅ ได้ข้อมูลแล้ว:', homeData.length, 'แถว');
+            
+            if (homeData.length > 0) {
+                console.log('🎉 การประมวลผลข้อมูลสำเร็จ!');
+                
+                filteredHomeData = [...homeData];
+                
+                // อัพเดทจำนวนแถวทั้งหมด
+                document.getElementById('home-total-rows').textContent = homeData.length.toLocaleString();
+                
+                // เติมข้อมูลใน filters
+                populateHomeFilters(homeData);
+                
+                // แสดงตาราง
+                displayHomeTable();
+                updateHomePagination();
+                
+                alert(`🎉 Debug สำเร็จ!\nประมวลผลข้อมูลได้: ${homeData.length} แถว\nตรวจสอบ Console เพื่อดูรายละเอียด`);
+            } else {
+                throw new Error('ไม่มีข้อมูลหลังการประมวลผล');
+            }
+            
+        } catch (error) {
+            console.error('❌ Debug การประมวลผลล้มเหลว:', error);
+            alert(`❌ Debug ล้มเหลว: ${error.message}\nตรวจสอบ Console เพื่อดูรายละเอียด`);
+            document.getElementById('home-table-container').innerHTML = `<div class="error">Debug ล้มเหลว: ${error.message}</div>`;
+        }
     }
     
     // ฟังก์ชันทดสอบ API
@@ -3015,7 +3231,20 @@
         });
         
         // แสดงข้อความต้อนรับแทนการโหลดข้อมูลทันที
-        document.getElementById('home-table-container').innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;"><h3>ยินดีต้อนรับสู่ Dashboard Compare Remain</h3><p>คลิกปุ่ม "🔧 ทดสอบ API" เพื่อตรวจสอบการเชื่อมต่อ หรือ "รีเฟรชข้อมูล" เพื่อโหลดข้อมูล</p></div>';
+        document.getElementById('home-table-container').innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                <h3>ยินดีต้อนรับสู่ Dashboard Compare Remain</h3>
+                <p>เลือกปุ่มด้านล่างเพื่อเริ่มต้นใช้งาน:</p>
+                <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                    <h4 style="color: #17a2b8; margin-bottom: 10px;">🔧 วิธีแก้ปัญหา</h4>
+                    <p style="text-align: left; margin: 5px 0;"><strong>1. ปุ่ม "🔬 ดูโครงสร้าง"</strong> - ตรวจสอบโครงสร้างข้อมูลจาก API</p>
+                    <p style="text-align: left; margin: 5px 0;"><strong>2. ปุ่ม "🔧 ทดสอบ API"</strong> - ทดสอบการเชื่อมต่อกับ API</p>
+                    <p style="text-align: left; margin: 5px 0;"><strong>3. ปุ่ม "🐛 Debug ข้อมูล"</strong> - ทดสอบการประมวลผลข้อมูล</p>
+                    <p style="text-align: left; margin: 5px 0;"><strong>4. ปุ่ม "รีเฟรชข้อมูล"</strong> - โหลดข้อมูลปกติ</p>
+                </div>
+                <p style="color: #dc3545; font-weight: bold;">⚠️ หากมีปัญหา ให้เริ่มจากปุ่ม "🔬 ดูโครงสร้าง" ก่อน</p>
+            </div>
+        `;
         
         // โหลดข้อมูลเมื่อเข้าหน้าข้อมูลช่าง
         document.querySelector('a[href="#technician-register"]').addEventListener('click', function() {
@@ -3092,6 +3321,10 @@
         document.getElementById('home-clear-filters-btn').addEventListener('click', clearHomeFilters);
         
         document.getElementById('home-debug-btn').addEventListener('click', debugHomeAPI);
+        
+        document.getElementById('home-debug-data-btn').addEventListener('click', debugHomeDataProcessing);
+        
+        document.getElementById('home-structure-debug-btn').addEventListener('click', debugDataStructure);
         
         // Event listeners สำหรับ controls All Register
         document.getElementById('all-register-search-input').addEventListener('input', filterAllRegisterData);
