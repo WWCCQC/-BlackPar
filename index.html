@@ -481,19 +481,16 @@
                             <option value="">ทุก RSM</option>
                         </select>
                         <select id="home-province-filter">
-                            <option value="">ทุกจังหวัด</option>
+                            <option value="">ทุก Province</option>
                         </select>
                         <select id="home-group-filter">
-                            <option value="">ทุก Group</option>
+                            <option value="">ทุก Group Code</option>
                         </select>
                     </div>
                     <div class="controls-row">
                         <button id="home-refresh-btn" class="refresh">รีเฟรชข้อมูล</button>
                         <button id="home-download-btn" class="download">ดาวน์โหลด Excel</button>
                         <button id="home-clear-filters-btn" style="background: #95a5a6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">เคลียร์การกรอง</button>
-                        <button id="home-debug-btn" style="background: #9b59b6; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">🔧 ทดสอบ API</button>
-                        <button id="home-debug-data-btn" style="background: #e74c3c; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">🐛 Debug ข้อมูล</button>
-                        <button id="home-structure-debug-btn" style="background: #f39c12; padding: 8px 16px; color: white; border: none; border-radius: 5px; cursor: pointer;">🔬 ดูโครงสร้าง</button>
                     </div>
                 </div>
                 
@@ -798,13 +795,18 @@
     let filteredHomeData = [];
     let currentHomePage = 1;
     let homeRowsPerPage = 25;
-    let homeColumns = [];
-    let blackCellColumns = [];
+    let homeDataCache = null;
+    let homeCacheTime = null;
     
-    // ฟังก์ชันดึงข้อมูลสำหรับหน้าหลักจาก API เดียวกัน
-    async function fetchHomeData() {
+    // ฟังก์ชันดึงข้อมูลสำหรับหน้าหลักจาก API (BlackByGroupCode sheet)
+    async function fetchHomeData(forceRefresh = false) {
+        // ตรวจสอบ cache
+        if (!forceRefresh && homeDataCache && homeCacheTime && (Date.now() - homeCacheTime < CACHE_DURATION)) {
+            return homeDataCache;
+        }
+        
         try {
-            console.log('🏠 กำลังดึงข้อมูลสำหรับหน้าหลัก...');
+            console.log('🏠 กำลังดึงข้อมูลจาก sheet "BlackByGroupCode"...');
             
             const response = await fetch('https://blackpar.onrender.com/sheet-data', {
                 method: 'GET',
@@ -824,249 +826,143 @@
             const json = await response.json();
             console.log('📄 Raw JSON response:', json);
             
-            // ตรวจสอบโครงสร้างข้อมูลทีละขั้น
-            if (!json) {
-                throw new Error('ไม่ได้รับข้อมูล JSON');
+            // ตรวจสอบโครงสร้างข้อมูล
+            if (!json || !json.sheets || json.sheets.length === 0) {
+                throw new Error('ไม่พบข้อมูล sheets');
             }
             
-            if (!json.sheets) {
-                console.error('❌ ไม่พบ sheets ใน JSON:', Object.keys(json));
-                throw new Error('ไม่พบ sheets ในข้อมูล');
+            // ค้นหา sheet ที่ชื่อ "BlackByGroupCode"
+            let targetSheet = null;
+            let sheetIndex = -1;
+            
+            for (let i = 0; i < json.sheets.length; i++) {
+                const sheet = json.sheets[i];
+                if (sheet.properties && sheet.properties.title === 'BlackByGroupCode') {
+                    targetSheet = sheet;
+                    sheetIndex = i;
+                    console.log(`✅ พบ sheet "BlackByGroupCode" ที่ตำแหน่ง ${i}`);
+                    break;
+                }
             }
             
-            if (!json.sheets[0]) {
-                console.error('❌ ไม่พบ sheet แรก:', json.sheets);
-                throw new Error('ไม่พบ sheet แรก');
-            }
-            
-            if (!json.sheets[0].data) {
-                console.error('❌ ไม่พบ data ใน sheet:', json.sheets[0]);
-                throw new Error('ไม่พบ data ใน sheet');
-            }
-            
-            if (!json.sheets[0].data[0]) {
-                console.error('❌ ไม่พบ data แรก:', json.sheets[0].data);
-                throw new Error('ไม่พบ data แรก');
-            }
-            
-            if (!json.sheets[0].data[0].rowData) {
-                console.error('❌ ไม่พบ rowData:', json.sheets[0].data[0]);
-                throw new Error('ไม่พบ rowData');
-            }
-            
-            const rowData = json.sheets[0].data[0].rowData;
-            console.log('📊 ข้อมูลทั้งหมด:', rowData.length, 'แถว');
-            console.log('🔍 โครงสร้าง rowData แถวแรก:', rowData[0]);
-            console.log('🔍 ตรวจสอบ 5 แถวแรก:');
-            
-            for (let i = 0; i < Math.min(5, rowData.length); i++) {
-                console.log(`แถวที่ ${i + 1}:`, {
-                    hasValues: !!rowData[i]?.values,
-                    valuesLength: rowData[i]?.values?.length || 0,
-                    firstFewValues: rowData[i]?.values?.slice(0, 5)?.map(cell => cell?.formattedValue) || []
+            // หากไม่พบ sheet ที่ชื่อ "BlackByGroupCode" ให้ใช้ sheet แรก
+            if (!targetSheet) {
+                console.warn('⚠️ ไม่พบ sheet "BlackByGroupCode" ใช้ sheet แรกแทน');
+                targetSheet = json.sheets[0];
+                sheetIndex = 0;
+                
+                // แสดงรายชื่อ sheet ทั้งหมดที่มี
+                console.log('📋 Sheet ทั้งหมดที่พบ:');
+                json.sheets.forEach((sheet, index) => {
+                    const sheetName = sheet.properties?.title || `Sheet ${index + 1}`;
+                    console.log(`  ${index}: ${sheetName}`);
                 });
             }
+            
+            if (!targetSheet.data || !targetSheet.data[0] || !targetSheet.data[0].rowData) {
+                throw new Error(`ไม่พบข้อมูลใน sheet "${targetSheet.properties?.title || 'Unknown'}"`);
+            }
+            
+            const rowData = targetSheet.data[0].rowData;
+            const sheetName = targetSheet.properties?.title || 'Unknown';
+            console.log(`📊 ใช้ข้อมูลจาก sheet: "${sheetName}"`);
+            console.log('📊 ข้อมูลทั้งหมด:', rowData.length, 'แถว');
             
             if (rowData.length < 2) {
                 throw new Error('ข้อมูลไม่เพียงพอ');
             }
             
-            // หาแถวที่มี values สำหรับเป็น header
-            let headerRow = null;
-            let headerRowIndex = -1;
-            
-            for (let i = 0; i < Math.min(5, rowData.length); i++) {
-                if (rowData[i] && rowData[i].values && rowData[i].values.length > 0) {
-                    headerRow = rowData[i];
-                    headerRowIndex = i;
-                    console.log(`✅ พบ header ที่แถวที่ ${i + 1}`);
-                    break;
-                }
-            }
-            
-            if (!headerRow || !headerRow.values) {
-                console.error('❌ ไม่พบ header ใน 5 แถวแรก');
-                console.error('📋 โครงสร้างข้อมูล rowData:', rowData.slice(0, 5));
-                throw new Error('ไม่พบหัวข้อ - ไม่มีแถวที่มี values ใน 5 แถวแรก');
-            }
-            
-            const headers = headerRow.values.map(cell => cell.formattedValue || '');
-            console.log('📋 หัวข้อ:', headers);
-            
-            // หาตำแหน่งคอลัมน์ที่ต้องการ (ปรับให้ยืดหยุ่นมากขึ้น)
-            console.log('🔍 หัวข้อทั้งหมด:', headers);
-            
-            const rsmIndex = headers.findIndex(h => h && (h.includes('RSM') || h.toLowerCase().includes('rsm')));
-            const provinceIndex = headers.findIndex(h => h && (h.includes('PROVINCE') || h.includes('Province') || h.includes('จังหวัด')));
-            const groupCodeIndex = headers.findIndex(h => h && (h.includes('GROUP_CODE') || h.includes('Group Code') || h.includes('รหัสกลุ่ม')));
-            const groupNameIndex = headers.findIndex(h => h && (h.includes('GROUP_NAME') || h.includes('Group Name') || h.includes('ชื่อกลุ่ม')));
-            
-            console.log('🎯 ตำแหน่งคอลัมน์:', {
-                RSM: rsmIndex,
-                PROVINCE: provinceIndex,
-                GROUP_CODE: groupCodeIndex,
-                GROUP_NAME: groupNameIndex
-            });
-            
-            // ถ้าหาไม่เจอ ให้ลองหาแบบ flexible มากขึ้น
-            if (rsmIndex === -1 || provinceIndex === -1 || groupCodeIndex === -1 || groupNameIndex === -1) {
-                console.log('⚠️ หาคอลัมน์แบบเข้มงวดไม่เจอ ลองใหม่แบบ flexible...');
-                
-                // หาแบบ flexible ขึ้น
-                const flexibleRsmIndex = headers.findIndex(h => h && h.toLowerCase().includes('rsm'));
-                const flexibleProvinceIndex = headers.findIndex(h => h && (h.toLowerCase().includes('province') || h.includes('จังหวัด')));
-                const flexibleGroupCodeIndex = headers.findIndex(h => h && (h.toLowerCase().includes('group') && h.toLowerCase().includes('code')));
-                const flexibleGroupNameIndex = headers.findIndex(h => h && (h.toLowerCase().includes('group') && h.toLowerCase().includes('name')));
-                
-                console.log('🔄 ตำแหน่งคอลัมน์ (flexible):', {
-                    RSM: flexibleRsmIndex,
-                    PROVINCE: flexibleProvinceIndex,
-                    GROUP_CODE: flexibleGroupCodeIndex,
-                    GROUP_NAME: flexibleGroupNameIndex
-                });
-                
-                // หาคอลัมน์แบบดูจากลำดับ (fallback)
-                if (flexibleRsmIndex === -1 || flexibleProvinceIndex === -1 || flexibleGroupCodeIndex === -1 || flexibleGroupNameIndex === -1) {
-                    console.log('⚠️ หาคอลัมน์ไม่เจอ ใช้ลำดับตามตำแหน่ง...');
-                    
-                    // สมมติตำแหน่งตามลำดับที่พบบ่อย
-                    const fallbackRsmIndex = headers.findIndex((h, i) => i < 10 && h); // ตำแหน่งแรกๆ
-                    const fallbackProvinceIndex = headers.findIndex((h, i) => i < 10 && h && i !== fallbackRsmIndex);
-                    const fallbackGroupCodeIndex = headers.findIndex((h, i) => i < 10 && h && i !== fallbackRsmIndex && i !== fallbackProvinceIndex);
-                    const fallbackGroupNameIndex = headers.findIndex((h, i) => i < 10 && h && i !== fallbackRsmIndex && i !== fallbackProvinceIndex && i !== fallbackGroupCodeIndex);
-                    
-                    console.log('📋 รายการหัวข้อ 10 ตัวแรก:');
-                    headers.slice(0, 10).forEach((h, i) => {
-                        console.log(`คอลัมน์ ${i}: "${h}"`);
-                    });
-                    
-                    throw new Error(`ไม่พบคอลัมน์ที่จำเป็น\nหัวข้อที่พบ: ${headers.slice(0, 10).join(', ')}`);
-                }
-                
-                // ใช้ค่า flexible
-                homeColumns = [
-                    { name: 'RSM', index: flexibleRsmIndex },
-                    { name: 'PROVINCE', index: flexibleProvinceIndex },
-                    { name: 'GROUP_CODE', index: flexibleGroupCodeIndex },
-                    { name: 'GROUP_NAME', index: flexibleGroupNameIndex }
-                ];
-            } else {
-                // ใช้ค่าปกติ
-                homeColumns = [
-                    { name: 'RSM', index: rsmIndex },
-                    { name: 'PROVINCE', index: provinceIndex },
-                    { name: 'GROUP_CODE', index: groupCodeIndex },
-                    { name: 'GROUP_NAME', index: groupNameIndex }
-                ];
-            }
-            
-            console.log('✅ ใช้คอลัมน์:', homeColumns);
-            
-            // หาคอลัมน์อื่นๆ ที่มีเซลล์สีดำ (ค่า 0)
-            blackCellColumns = [];
-            
-            // ตรวจสอบแถวข้อมูล (ไม่ใช่หัวข้อ) เพื่อหาคอลัมน์ที่มีค่า 0
-            for (let colIndex = 0; colIndex < headers.length; colIndex++) {
-                // ข้ามคอลัมน์พื้นฐานที่เรามีแล้ว
-                if ([rsmIndex, provinceIndex, groupCodeIndex, groupNameIndex].includes(colIndex)) {
-                    continue;
-                }
-                
-                // ตรวจสอบว่าคอลัมน์นี้มีค่า 0 หรือไม่
-                let hasZeroValue = false;
-                for (let rowIndex = 1; rowIndex < Math.min(rowData.length, 20); rowIndex++) {
-                    const row = rowData[rowIndex];
-                    if (row.values && row.values[colIndex]) {
-                        const value = row.values[colIndex].formattedValue;
-                        if (value === "0" || value === 0) {
-                            hasZeroValue = true;
-                            break;
-                        }
-                    }
-                }
-                
-                if (hasZeroValue) {
-                    blackCellColumns.push({
-                        name: headers[colIndex] || `Col${colIndex}`,
-                        index: colIndex
-                    });
-                }
-            }
-            
-            console.log('⚫ คอลัมน์ที่มีเซลล์สีดำ:', blackCellColumns.length, 'คอลัมน์');
-            
-            // ประมวลผลข้อมูล
+            // ประมวลผลข้อมูลพร้อมรูปแบบและสี
             const processedData = [];
             
-            console.log('🔄 เริ่มประมวลผลข้อมูล:', rowData.length, 'แถว');
-            console.log('🔄 เริ่มจากแถวที่:', headerRowIndex + 2, '(ข้าม header)');
-            
-            for (let rowIndex = headerRowIndex + 1; rowIndex < rowData.length; rowIndex++) {
-                const row = rowData[rowIndex];
-                if (!row.values) {
-                    if (rowIndex < 5) console.log(`❌ แถวที่ ${rowIndex + 1}: ไม่มี values`);
-                    continue;
-                }
+            rowData.forEach((row, rIdx) => {
+                if (!row.values) return;
                 
-                const rowObj = {};
+                const rowObj = {
+                    rowIndex: rIdx,
+                    cells: []
+                };
                 
-                // เพิ่มคอลัมน์พื้นฐาน
-                homeColumns.forEach(col => {
-                    const cell = row.values[col.index];
-                    const value = cell ? (cell.formattedValue || '') : '';
-                    rowObj[col.name] = value;
+                row.values.forEach((cell, cIdx) => {
+                    let value = cell.formattedValue || "";
+                    let cellStyle = {
+                        backgroundColor: null,
+                        textColor: null,
+                        isBold: false,
+                        isItalic: false
+                    };
                     
-                    if (rowIndex < 3) { // debug แถวแรกๆ
-                        console.log(`แถวที่ ${rowIndex + 1}, ${col.name}[${col.index}]:`, value);
+                    // จัดการค่าว่าง
+                    if (value === "") {
+                        value = "-";
                     }
-                });
-                
-                // เพิ่มคอลัมน์ที่มีเซลล์สีดำ เฉพาะที่มีค่า 0
-                blackCellColumns.forEach(col => {
-                    const cell = row.values[col.index];
-                    if (cell) {
-                        const value = cell.formattedValue;
-                        if (value === "0" || value === 0) {
-                            rowObj[col.name] = value;
+                    
+                    // ถ้าค่าเป็น "0" หรือ 0 → background: ดำ, font: ดำ
+                    if (value === "0" || value === 0) {
+                        cellStyle.backgroundColor = "#000000";
+                        cellStyle.textColor = "#000000";
+                    } else {
+                        // ใช้สีจาก Google Sheets API
+                        if (cell.effectiveFormat && cell.effectiveFormat.backgroundColor) {
+                            let c = cell.effectiveFormat.backgroundColor;
+                            if (c.red !== undefined && c.green !== undefined && c.blue !== undefined) {
+                                let r = Math.round((c.red ?? 1) * 255);
+                                let g = Math.round((c.green ?? 1) * 255);
+                                let b = Math.round((c.blue ?? 1) * 255);
+                                cellStyle.backgroundColor = `rgb(${r},${g},${b})`;
+                                
+                                // ถ้าเป็นสีเข้ม ให้ตัวอักษรเป็นสีขาว
+                                if ((r + g + b) / 3 < 128) {
+                                    cellStyle.textColor = "#ffffff";
+                                }
+                            }
+                        }
+                        
+                        // สี font
+                        if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.foregroundColor) {
+                            let c = cell.effectiveFormat.textFormat.foregroundColor;
+                            if (c.red !== undefined && c.green !== undefined && c.blue !== undefined) {
+                                let r = Math.round(c.red * 255);
+                                let g = Math.round(c.green * 255);
+                                let b = Math.round(c.blue * 255);
+                                cellStyle.textColor = `rgb(${r},${g},${b})`;
+                            }
+                        }
+                        
+                        // ตัวหนา
+                        if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.bold) {
+                            cellStyle.isBold = true;
+                        }
+                        
+                        // ตัวเอียง
+                        if (cell.effectiveFormat && cell.effectiveFormat.textFormat && cell.effectiveFormat.textFormat.italic) {
+                            cellStyle.isItalic = true;
                         }
                     }
+                    
+                    rowObj.cells.push({
+                        value: value,
+                        style: cellStyle,
+                        colIndex: cIdx
+                    });
+                    
+                    // เก็บค่าแบบเดิมด้วยสำหรับการกรอง
+                    rowObj[`Col_${cIdx}`] = value;
                 });
                 
-                // ตรวจสอบว่ามีข้อมูลในคอลัมน์พื้นฐานหรือไม่
-                const hasBasicData = homeColumns.some(col => {
-                    const value = rowObj[col.name];
-                    return value && value.toString().trim() !== '';
-                });
-                
-                if (hasBasicData) {
-                    processedData.push(rowObj);
-                    if (rowIndex < 3) { // debug แถวแรกๆ
-                        console.log(`✅ แถวที่ ${rowIndex + 1} ผ่าน:`, rowObj);
-                    }
-                } else {
-                    if (rowIndex < 10) { // debug แถวแรกๆ
-                        console.log(`❌ แถวที่ ${rowIndex + 1} ไม่ผ่าน (ไม่มีข้อมูลพื้นฐาน):`, rowObj);
-                    }
-                }
-            }
+                processedData.push(rowObj);
+            });
             
             console.log('✅ ประมวลผลข้อมูลเสร็จ:', processedData.length, 'แถว');
             
-            if (processedData.length === 0) {
-                throw new Error('ไม่มีข้อมูลที่ประมวลผลได้ - อาจเป็นเพราะหาคอลัมน์ไม่เจอหรือข้อมูลว่าง');
-            }
-            
-            // แสดงตัวอย่างข้อมูลที่ประมวลผลแล้ว
-            console.log('📋 ตัวอย่างข้อมูลที่ประมวลผลแล้ว (3 แถวแรก):');
-            processedData.slice(0, 3).forEach((row, index) => {
-                console.log(`แถวที่ ${index + 1}:`, row);
-            });
+            // เก็บ cache
+            homeDataCache = processedData;
+            homeCacheTime = Date.now();
             
             return processedData;
             
         } catch (error) {
             console.error('❌ Error fetching home data:', error);
-            console.error('❌ Error stack:', error.stack);
             
             // ตรวจสอบประเภทของ error
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
@@ -1083,13 +979,19 @@
     
     // ฟังก์ชันสร้างตัวเลือกใน dropdown สำหรับหน้าหลัก
     function populateHomeFilters(data) {
-        const rsms = [...new Set(data.map(row => row['RSM']))].filter(rsm => rsm).sort();
-        const provinces = [...new Set(data.map(row => row['PROVINCE']))].filter(province => province).sort();
-        const groups = [...new Set(data.map(row => row['GROUP_CODE']))].filter(group => group).sort();
+        if (data.length === 0) return;
         
-        populateHomeSelect('home-rsm-filter', rsms);
-        populateHomeSelect('home-province-filter', provinces);
-        populateHomeSelect('home-group-filter', groups);
+        // หาค่าที่ไม่ซ้ำจากคอลัมน์ต่างๆ (ข้าม header row แรก)
+        const dataRows = data.slice(1);
+        
+        // ดึงค่าจากคอลัมน์ต่างๆ สำหรับการกรอง
+        const col0Values = [...new Set(dataRows.map(row => row['Col_0'] || ''))].filter(val => val && val.trim() && val !== '-').sort();
+        const col1Values = [...new Set(dataRows.map(row => row['Col_1'] || ''))].filter(val => val && val.trim() && val !== '-').sort();
+        const col2Values = [...new Set(dataRows.map(row => row['Col_2'] || ''))].filter(val => val && val.trim() && val !== '-').sort();
+        
+        populateHomeSelect('home-rsm-filter', col0Values);
+        populateHomeSelect('home-province-filter', col1Values);
+        populateHomeSelect('home-group-filter', col2Values);
     }
     
     function populateHomeSelect(selectId, options) {
@@ -1118,19 +1020,22 @@
     // ฟังก์ชันกรองข้อมูลหน้าหลัก
     function filterHomeData() {
         const searchTerm = document.getElementById('home-search-input').value.toLowerCase();
-        const rsmFilter = document.getElementById('home-rsm-filter').value;
-        const provinceFilter = document.getElementById('home-province-filter').value;
-        const groupFilter = document.getElementById('home-group-filter').value;
+        const col0Filter = document.getElementById('home-rsm-filter').value;
+        const col1Filter = document.getElementById('home-province-filter').value;
+        const col2Filter = document.getElementById('home-group-filter').value;
         
-        filteredHomeData = homeData.filter(row => {
+        // ข้าม header row (แถวแรก) ในการกรอง
+        const dataRows = homeData.slice(1);
+        
+        filteredHomeData = dataRows.filter(row => {
             const matchSearch = !searchTerm || Object.values(row).some(value => 
                 value.toString().toLowerCase().includes(searchTerm)
             );
-            const matchRSM = !rsmFilter || row['RSM'] === rsmFilter;
-            const matchProvince = !provinceFilter || row['PROVINCE'] === provinceFilter;
-            const matchGroup = !groupFilter || row['GROUP_CODE'] === groupFilter;
+            const matchCol0 = !col0Filter || row['Col_0'] === col0Filter;
+            const matchCol1 = !col1Filter || row['Col_1'] === col1Filter;
+            const matchCol2 = !col2Filter || row['Col_2'] === col2Filter;
             
-            return matchSearch && matchRSM && matchProvince && matchGroup;
+            return matchSearch && matchCol0 && matchCol1 && matchCol2;
         });
         
         // อัพเดทจำนวนแถวทั้งหมด
@@ -1153,24 +1058,23 @@
             return;
         }
         
-        // สร้างรายการคอลัมน์ทั้งหมดที่จะแสดง
-        const allColumns = [...homeColumns, ...blackCellColumns];
-        
         let html = '<div style="height: 100%; overflow: auto;"><table>';
         
-        // Header
+        // Header - ใช้ข้อมูลจากแถวแรก (header row)
         html += '<thead><tr>';
         html += '<th style="width: 60px;">#</th>'; // เพิ่มคอลัมน์เลขที่
-        allColumns.forEach(column => {
-            let width = '';
-            if (column.name === 'RSM') width = 'width: 100px;';
-            else if (column.name === 'PROVINCE') width = 'width: 120px;';
-            else if (column.name === 'GROUP_CODE') width = 'width: 120px;';
-            else if (column.name === 'GROUP_NAME') width = 'width: 200px;';
-            else width = 'width: 80px;';
-            
-            html += `<th style="${width}">${column.name}</th>`;
-        });
+        
+        if (homeData.length > 0) {
+            const headerRow = homeData[0];
+            if (headerRow.cells) {
+                headerRow.cells.forEach((cell, index) => {
+                    const headerValue = cell.value || `คอลัมน์ ${index + 1}`;
+                    let headerStyle = 'min-width: 100px; padding: 8px; text-align: center; background-color: #2c3e50; color: white; font-weight: 600;';
+                    
+                    html += `<th style="${headerStyle}">${headerValue}</th>`;
+                });
+            }
+        }
         html += '</tr></thead>';
         
         // Body
@@ -1180,32 +1084,50 @@
             html += '<tr>';
             
             // เลขที่แถว
-            html += `<td style="text-align: center; font-weight: bold; color: #666;">${rowNumber}</td>`;
+            html += `<td style="text-align: center; font-weight: bold; color: #666; border: 1px solid #ddd; padding: 6px;">${rowNumber}</td>`;
             
-            allColumns.forEach(column => {
-                let value = row[column.name] || '-';
-                let style = '';
-                
-                // จัดรูปแบบพิเศษสำหรับคอลัมน์ต่างๆ
-                if (column.name === 'RSM') {
-                    style += 'background: #e3f2fd; font-weight: 600; text-align: center;';
-                } else if (column.name === 'PROVINCE') {
-                    style += 'background: #f3e5f5; font-weight: 500; text-align: center;';
-                } else if (column.name === 'GROUP_CODE') {
-                    style += 'font-family: monospace; text-align: center; background: #f5f5f5;';
-                } else if (column.name === 'GROUP_NAME') {
-                    style += 'text-align: left; font-weight: 500;';
-                } else {
-                    // คอลัมน์ที่มีเซลล์สีดำ
-                    if (value === "0" || value === 0) {
-                        style += 'background: #000; color: #000; text-align: center; font-weight: bold;';
+            // แสดงข้อมูลแต่ละเซลล์พร้อมสีและรูปแบบ
+            if (row.cells) {
+                row.cells.forEach((cell, colIndex) => {
+                    let value = cell.value || '-';
+                    let style = 'padding: 6px; border: 1px solid #ddd;';
+                    
+                    // ใช้สีและรูปแบบจาก API
+                    if (cell.style.backgroundColor) {
+                        style += `background-color: ${cell.style.backgroundColor};`;
+                    }
+                    
+                    if (cell.style.textColor) {
+                        style += `color: ${cell.style.textColor};`;
+                    }
+                    
+                    if (cell.style.isBold) {
+                        style += 'font-weight: bold;';
+                    }
+                    
+                    if (cell.style.isItalic) {
+                        style += 'font-style: italic;';
+                    }
+                    
+                    // จัดตำแหน่งข้อความ
+                    if (colIndex < 4) {
+                        style += 'text-align: center;';
                     } else {
                         style += 'text-align: center;';
                     }
-                }
-                
-                html += `<td style="${style}" title="${value}">${value}</td>`;
-            });
+                    
+                    // จัดรูปแบบตัวเลข
+                    if (!isNaN(value) && value !== "" && value !== "-" && colIndex > 5) {
+                        try {
+                            value = parseInt(value).toLocaleString();
+                        } catch (e) {
+                            // ถ้าแปลงไม่ได้ให้ใช้ค่าเดิม
+                        }
+                    }
+                    
+                    html += `<td style="${style}" title="${cell.value}">${value}</td>`;
+                });
+            }
             html += '</tr>';
         });
         html += '</tbody></table></div>';
@@ -1264,27 +1186,30 @@
         // สร้าง workbook และ worksheet
         const wb = XLSX.utils.book_new();
         
-        // สร้างรายการคอลัมน์ทั้งหมด
-        const allColumns = [...homeColumns, ...blackCellColumns];
-        const columnNames = allColumns.map(col => col.name);
+        // ใช้ข้อมูลจริงจากตาราง (รวม header)
+        const allData = [homeData[0], ...filteredHomeData];
         
-        // เตรียมข้อมูลสำหรับ Excel
-        const excelData = [columnNames]; // Header row
-        
-        // เพิ่มข้อมูลแต่ละแถว
-        filteredHomeData.forEach(row => {
-            const rowData = columnNames.map(column => row[column] || '');
-            excelData.push(rowData);
+        // แปลงเป็นรูปแบบที่ Excel เข้าใจ
+        const excelData = allData.map(row => {
+            if (row.cells) {
+                return row.cells.map(cell => cell.value || '');
+            } else {
+                // fallback สำหรับข้อมูลที่ไม่มี cells
+                const keys = Object.keys(row).filter(key => key.startsWith('Col_'));
+                return keys.map(key => row[key] || '');
+            }
         });
         
         // สร้าง worksheet จากข้อมูล
         const ws = XLSX.utils.aoa_to_sheet(excelData);
         
         // กำหนดความกว้างของคอลัมน์
-        const colWidths = columnNames.map(col => ({
-            wch: Math.max(col.length, 15) // ความกว้างขั้นต่ำ 15 ตัวอักษร
-        }));
-        ws['!cols'] = colWidths;
+        if (homeData[0] && homeData[0].cells) {
+            const colWidths = homeData[0].cells.map(cell => ({
+                wch: Math.max(String(cell.value || '').length, 15) // ความกว้างขั้นต่ำ 15 ตัวอักษร
+            }));
+            ws['!cols'] = colWidths;
+        }
         
         // จัดรูปแบบ header
         const headerRange = XLSX.utils.decode_range(ws['!ref']);
@@ -1301,12 +1226,12 @@
         }
         
         // เพิ่ม worksheet ลง workbook
-        XLSX.utils.book_append_sheet(wb, ws, "หน้าหลัก");
+        XLSX.utils.book_append_sheet(wb, ws, "BlackByGroupCode");
         
         // สร้างชื่อไฟล์พร้อมวันที่
         const today = new Date();
         const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
-        const fileName = `Dashboard_Home_${dateStr}.xlsx`;
+        const fileName = `BlackByGroupCode_${dateStr}.xlsx`;
         
         // ดาวน์โหลดไฟล์ Excel
         XLSX.writeFile(wb, fileName);
@@ -1324,210 +1249,22 @@
         filterHomeData();
     }
     
-    // ฟังก์ชันทดสอบโครงสร้างข้อมูลอย่างละเอียด
-    async function debugDataStructure() {
-        try {
-            console.clear();
-            console.log('🔬 เริ่มทดสอบโครงสร้างข้อมูล...');
-            
-            document.getElementById('home-table-container').innerHTML = '<div class="loading">กำลังตรวจสอบโครงสร้างข้อมูล...</div>';
-            
-            const response = await fetch('https://blackpar.onrender.com/sheet-data');
-            const json = await response.json();
-            
-            console.log('🏗️ โครงสร้าง JSON ระดับสูงสุด:');
-            console.log('- Type:', typeof json);
-            console.log('- Keys:', Object.keys(json));
-            console.log('- Full object:', json);
-            
-            if (json.sheets) {
-                console.log('📋 ข้อมูล sheets:');
-                console.log('- จำนวน sheets:', json.sheets.length);
-                console.log('- Sheet แรก keys:', Object.keys(json.sheets[0] || {}));
-                console.log('- Sheet แรก:', json.sheets[0]);
-                
-                if (json.sheets[0]?.data) {
-                    console.log('📊 ข้อมูล data:');
-                    console.log('- จำนวน data elements:', json.sheets[0].data.length);
-                    console.log('- Data แรก keys:', Object.keys(json.sheets[0].data[0] || {}));
-                    console.log('- Data แรก:', json.sheets[0].data[0]);
-                    
-                    if (json.sheets[0].data[0]?.rowData) {
-                        console.log('📝 ข้อมูล rowData:');
-                        const rowData = json.sheets[0].data[0].rowData;
-                        console.log('- จำนวน rows:', rowData.length);
-                        console.log('- ตัวอย่าง 10 แถวแรก:');
-                        
-                        for (let i = 0; i < Math.min(10, rowData.length); i++) {
-                            const row = rowData[i];
-                            console.log(`  แถวที่ ${i + 1}:`, {
-                                exists: !!row,
-                                hasValues: !!row?.values,
-                                valuesCount: row?.values?.length || 0,
-                                sampleValues: row?.values?.slice(0, 3)?.map(cell => ({
-                                    formattedValue: cell?.formattedValue,
-                                    hasFormat: !!cell?.effectiveFormat
-                                })) || []
-                            });
-                        }
-                        
-                        // หาแถวแรกที่มี values
-                        let firstRowWithValues = null;
-                        let firstRowIndex = -1;
-                        for (let i = 0; i < rowData.length; i++) {
-                            if (rowData[i]?.values?.length > 0) {
-                                firstRowWithValues = rowData[i];
-                                firstRowIndex = i;
-                                break;
-                            }
-                        }
-                        
-                        if (firstRowWithValues) {
-                            console.log(`📌 แถวแรกที่มีข้อมูล (แถวที่ ${firstRowIndex + 1}):`);
-                            console.log('- จำนวนคอลัมน์:', firstRowWithValues.values.length);
-                            console.log('- ข้อมูลทั้งหมด:');
-                            firstRowWithValues.values.forEach((cell, index) => {
-                                console.log(`  คอลัมน์ ${index + 1}: "${cell?.formattedValue || '(ว่าง)'}"`);
-                            });
-                        }
-                    }
-                }
-            }
-            
-            alert(`🔬 ตรวจสอบโครงสร้างเสร็จสิ้น!\nตรวจสอบ Console เพื่อดูรายละเอียดครับ`);
-            
-        } catch (error) {
-            console.error('❌ ตรวจสอบโครงสร้างล้มเหลว:', error);
-            alert(`❌ ตรวจสอบโครงสร้างล้มเหลว: ${error.message}`);
-            document.getElementById('home-table-container').innerHTML = `<div class="error">ตรวจสอบโครงสร้างล้มเหลว: ${error.message}</div>`;
-        }
-    }
-    
-    // ฟังก์ชันทดสอบการประมวลผลข้อมูลโดยเฉพาะ
-    async function debugHomeDataProcessing() {
-        try {
-            console.clear();
-            console.log('🐛 เริ่มทดสอบการประมวลผลข้อมูล...');
-            
-            document.getElementById('home-table-container').innerHTML = '<div class="loading">กำลัง Debug การประมวลผลข้อมูล...</div>';
-            
-            homeData = await fetchHomeData();
-            
-            console.log('✅ ได้ข้อมูลแล้ว:', homeData.length, 'แถว');
-            
-            if (homeData.length > 0) {
-                console.log('🎉 การประมวลผลข้อมูลสำเร็จ!');
-                
-                filteredHomeData = [...homeData];
-                
-                // อัพเดทจำนวนแถวทั้งหมด
-                document.getElementById('home-total-rows').textContent = homeData.length.toLocaleString();
-                
-                // เติมข้อมูลใน filters
-                populateHomeFilters(homeData);
-                
-                // แสดงตาราง
-                displayHomeTable();
-                updateHomePagination();
-                
-                alert(`🎉 Debug สำเร็จ!\nประมวลผลข้อมูลได้: ${homeData.length} แถว\nตรวจสอบ Console เพื่อดูรายละเอียด`);
-            } else {
-                throw new Error('ไม่มีข้อมูลหลังการประมวลผล');
-            }
-            
-        } catch (error) {
-            console.error('❌ Debug การประมวลผลล้มเหลว:', error);
-            alert(`❌ Debug ล้มเหลว: ${error.message}\nตรวจสอบ Console เพื่อดูรายละเอียด`);
-            document.getElementById('home-table-container').innerHTML = `<div class="error">Debug ล้มเหลว: ${error.message}</div>`;
-        }
-    }
-    
-    // ฟังก์ชันทดสอบ API
-    async function debugHomeAPI() {
-        try {
-            console.clear(); // เคลียร์ console
-            console.log('🔧 เริ่มทดสอบ API...');
-            
-            // แสดงสถานะการโหลด
-            document.getElementById('home-table-container').innerHTML = '<div class="loading">กำลังทดสอบ API...</div>';
-            
-            // ทดสอบการเชื่อมต่อ API
-            console.log('🌐 ทดสอบการเชื่อมต่อ:', 'https://blackpar.onrender.com/sheet-data');
-            
-            const response = await fetch('https://blackpar.onrender.com/sheet-data', {
-                method: 'GET',
-                mode: 'cors',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            console.log('📡 Response status:', response.status, response.statusText);
-            console.log('📡 Response headers:', [...response.headers.entries()]);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const json = await response.json();
-            console.log('📄 Raw response type:', typeof json);
-            console.log('📄 Raw response keys:', Object.keys(json));
-            console.log('📄 Full JSON structure:', json);
-            
-            // ตรวจสอบโครงสร้าง
-            if (json.sheets) {
-                console.log('✅ พบ sheets:', json.sheets.length);
-                if (json.sheets[0]) {
-                    console.log('✅ พบ sheet แรก:', Object.keys(json.sheets[0]));
-                    if (json.sheets[0].data) {
-                        console.log('✅ พบ data:', json.sheets[0].data.length);
-                        if (json.sheets[0].data[0]) {
-                            console.log('✅ พบ data แรก:', Object.keys(json.sheets[0].data[0]));
-                            if (json.sheets[0].data[0].rowData) {
-                                console.log('✅ พบ rowData:', json.sheets[0].data[0].rowData.length, 'แถว');
-                                
-                                // แสดงตัวอย่าง 3 แถวแรก
-                                const rowData = json.sheets[0].data[0].rowData;
-                                console.log('📋 ตัวอย่าง 3 แถวแรก:');
-                                rowData.slice(0, 3).forEach((row, index) => {
-                                    if (row.values) {
-                                        const values = row.values.map(cell => cell.formattedValue || '');
-                                        console.log(`แถวที่ ${index + 1}:`, values);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            
-            console.log('✅ ทดสอบเสร็จสิ้น!');
-            alert(`ทดสอบ API สำเร็จ!\nStatus: ${response.status}\nข้อมูล: ${json.sheets?.[0]?.data?.[0]?.rowData?.length || 0} แถว\nตรวจสอบ Console เพื่อดูรายละเอียด`);
-            
-            // กลับไปโหลดข้อมูลปกติ
-            await loadHomeData();
-            
-        } catch (error) {
-            console.error('❌ ทดสอบ API ล้มเหลว:', error);
-            alert(`ทดสอบ API ล้มเหลว: ${error.message}\nตรวจสอบ Console เพื่อดูรายละเอียด`);
-            document.getElementById('home-table-container').innerHTML = `<div class="error">ทดสอบ API ล้มเหลว: ${error.message}</div>`;
-        }
-    }
+
     
     // ฟังก์ชันโหลดข้อมูลหน้าหลัก
-    async function loadHomeData() {
+    async function loadHomeData(forceRefresh = false) {
         try {
-            document.getElementById('home-table-container').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
+            document.getElementById('home-table-container').innerHTML = '<div class="loading">กำลังโหลดข้อมูลจาก sheet "BlackByGroupCode"...</div>';
             
-            homeData = await fetchHomeData();
+            homeData = await fetchHomeData(forceRefresh);
             
-            console.log('📊 ข้อมูลหน้าหลักหลังการประมวลผล:', homeData.length, 'แถว');
+            console.log('📊 ข้อมูลหน้าหลักที่ดึงมาแล้ว:', homeData.length, 'แถว');
             
-            filteredHomeData = [...homeData];
+            // กรองข้อมูล (ข้าม header row)
+            filteredHomeData = homeData.slice(1);
             
-            // อัพเดทจำนวนแถวทั้งหมด
-            document.getElementById('home-total-rows').textContent = homeData.length.toLocaleString();
+            // อัพเดทจำนวนแถวทั้งหมด (ไม่นับ header)
+            document.getElementById('home-total-rows').textContent = filteredHomeData.length.toLocaleString();
             
             // เติมข้อมูลใน filters
             populateHomeFilters(homeData);
@@ -1538,21 +1275,21 @@
             
             // แสดงข้อความสำเร็จ
             if (homeData.length > 0) {
-                console.log('✅ โหลดข้อมูลหน้าหลักสำเร็จ!', homeData.length, 'รายการ');
+                console.log('✅ โหลดข้อมูลหน้าหลักสำเร็จ!', homeData.length, 'รายการ (รวม header)');
             } else {
-                console.warn('⚠️ ไม่พบข้อมูลหรือข้อมูลไม่ตรงตามเงื่อนไข');
+                console.warn('⚠️ ไม่พบข้อมูลใน sheet "BlackByGroupCode"');
             }
             
         } catch (error) {
             console.error('Error loading home data:', error);
             document.getElementById('home-table-container').innerHTML = `
                 <div class="error">
-                    <h3>⚠️ โหลดข้อมูลไม่ได้</h3>
+                    <h3>⚠️ โหลดข้อมูลจาก sheet "BlackByGroupCode" ไม่ได้</h3>
                     <p><strong>สาเหตุ:</strong> ${error.message}</p>
                     <p><strong>แนะนำ:</strong></p>
                     <ul style="text-align: left; margin: 10px 0;">
-                        <li>กดปุ่ม "🔧 ทดสอบ API" เพื่อตรวจสอบการเชื่อมต่อ</li>
                         <li>ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต</li>
+                        <li>ตรวจสอบว่า API server สามารถเข้าถึงได้</li>
                         <li>ลองรีเฟรชข้อมูลอีกครั้งในภายหลัง</li>
                         <li>หาก API อยู่บน Render.com อาจต้องรอ 1-2 นาทีให้ตื่น</li>
                     </ul>
@@ -3225,24 +2962,48 @@
     document.addEventListener('DOMContentLoaded', function() {
         // โหลดข้อมูลเมื่อเข้าหน้าหลัก
         document.querySelector('a[href="#home"]').addEventListener('click', function() {
-            if (homeData.length === 0) {
-                loadHomeData();
-            }
+            // แสดงข้อความต้อนรับเสมอ
+            document.getElementById('home-table-container').innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                    <h3>🏠 หน้าหลัก - BlackByGroupCode</h3>
+                    <p>ระบุดึงข้อมูลจาก Sheet <strong>"BlackByGroupCode"</strong> โดยเฉพาะ พร้อมสีและรูปแบบ</p>
+                    <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745;">
+                        <h4 style="color: #28a745; margin-bottom: 10px;">📋 วิธีใช้งาน</h4>
+                        <p style="text-align: left; margin: 5px 0;"><strong>1. กดปุ่ม "รีเฟรชข้อมูล"</strong> - เพื่อโหลดข้อมูลจาก API พร้อมสีและรูปแบบ</p>
+                        <p style="text-align: left; margin: 5px 0;"><strong>2. ใช้ตัวกรอง</strong> - เพื่อค้นหาข้อมูลที่ต้องการ</p>
+                        <p style="text-align: left; margin: 5px 0;"><strong>3. ดาวน์โหลด Excel</strong> - เพื่อส่งออกข้อมูลที่กรองแล้ว</p>
+                    </div>
+                    <div style="margin: 20px 0; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                        <h4 style="color: #1976d2; margin-bottom: 10px;">🎨 คุณสมบัติพิเศษ</h4>
+                        <p style="text-align: left; margin: 5px 0; font-size: 14px;">• แสดงสีพื้นหลังและข้อความตามใน Google Sheets</p>
+                        <p style="text-align: left; margin: 5px 0; font-size: 14px;">• เซลล์ที่มีค่า "0" จะแสดงเป็นสีดำ</p>
+                        <p style="text-align: left; margin: 5px 0; font-size: 14px;">• รองรับการจัดรูปแบบตัวหนา และตัวเอียง</p>
+                        <p style="text-align: left; margin: 5px 0; font-size: 14px;">• ระบบจะค้นหา sheet "BlackByGroupCode" โดยเฉพาะ</p>
+                    </div>
+                    <p style="color: #17a2b8; font-weight: bold;">👆 กดปุ่ม "รีเฟรชข้อมูล" เพื่อเริ่มต้น</p>
+                </div>
+            `;
         });
         
         // แสดงข้อความต้อนรับแทนการโหลดข้อมูลทันที
         document.getElementById('home-table-container').innerHTML = `
             <div style="text-align: center; padding: 40px; color: #7f8c8d;">
-                <h3>ยินดีต้อนรับสู่ Dashboard Compare Remain</h3>
-                <p>เลือกปุ่มด้านล่างเพื่อเริ่มต้นใช้งาน:</p>
-                <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #17a2b8;">
-                    <h4 style="color: #17a2b8; margin-bottom: 10px;">🔧 วิธีแก้ปัญหา</h4>
-                    <p style="text-align: left; margin: 5px 0;"><strong>1. ปุ่ม "🔬 ดูโครงสร้าง"</strong> - ตรวจสอบโครงสร้างข้อมูลจาก API</p>
-                    <p style="text-align: left; margin: 5px 0;"><strong>2. ปุ่ม "🔧 ทดสอบ API"</strong> - ทดสอบการเชื่อมต่อกับ API</p>
-                    <p style="text-align: left; margin: 5px 0;"><strong>3. ปุ่ม "🐛 Debug ข้อมูล"</strong> - ทดสอบการประมวลผลข้อมูล</p>
-                    <p style="text-align: left; margin: 5px 0;"><strong>4. ปุ่ม "รีเฟรชข้อมูล"</strong> - โหลดข้อมูลปกติ</p>
+                <h3>🏠 หน้าหลัก - BlackByGroupCode</h3>
+                <p>ระบุดึงข้อมูลจาก Sheet <strong>"BlackByGroupCode"</strong> โดยเฉพาะ พร้อมสีและรูปแบบ</p>
+                <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745;">
+                    <h4 style="color: #28a745; margin-bottom: 10px;">📋 วิธีใช้งาน</h4>
+                    <p style="text-align: left; margin: 5px 0;"><strong>1. กดปุ่ม "รีเฟรชข้อมูล"</strong> - เพื่อโหลดข้อมูลจาก API พร้อมสีและรูปแบบ</p>
+                    <p style="text-align: left; margin: 5px 0;"><strong>2. ใช้ตัวกรอง</strong> - เพื่อค้นหาข้อมูลที่ต้องการ</p>
+                    <p style="text-align: left; margin: 5px 0;"><strong>3. ดาวน์โหลด Excel</strong> - เพื่อส่งออกข้อมูลที่กรองแล้ว</p>
                 </div>
-                <p style="color: #dc3545; font-weight: bold;">⚠️ หากมีปัญหา ให้เริ่มจากปุ่ม "🔬 ดูโครงสร้าง" ก่อน</p>
+                                     <div style="margin: 20px 0; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                         <h4 style="color: #1976d2; margin-bottom: 10px;">🎨 คุณสมบัติพิเศษ</h4>
+                         <p style="text-align: left; margin: 5px 0; font-size: 14px;">• แสดงสีพื้นหลังและข้อความตามใน Google Sheets</p>
+                         <p style="text-align: left; margin: 5px 0; font-size: 14px;">• เซลล์ที่มีค่า "0" จะแสดงเป็นสีดำ</p>
+                         <p style="text-align: left; margin: 5px 0; font-size: 14px;">• รองรับการจัดรูปแบบตัวหนา และตัวเอียง</p>
+                         <p style="text-align: left; margin: 5px 0; font-size: 14px;">• ระบบจะค้นหา sheet "BlackByGroupCode" โดยเฉพาะ</p>
+                     </div>
+                     <p style="color: #17a2b8; font-weight: bold;">👆 กดปุ่ม "รีเฟรชข้อมูล" เพื่อเริ่มต้น</p>
             </div>
         `;
         
@@ -3313,18 +3074,15 @@
         
         document.getElementById('home-refresh-btn').addEventListener('click', function() {
             console.log('🔄 รีเฟรชข้อมูลหน้าหลัก');
-            loadHomeData();
+            // เคลียร์ cache ก่อนรีเฟรช
+            homeDataCache = null;
+            homeCacheTime = null;
+            loadHomeData(true);
         });
         
         document.getElementById('home-download-btn').addEventListener('click', downloadHomeExcel);
         
         document.getElementById('home-clear-filters-btn').addEventListener('click', clearHomeFilters);
-        
-        document.getElementById('home-debug-btn').addEventListener('click', debugHomeAPI);
-        
-        document.getElementById('home-debug-data-btn').addEventListener('click', debugHomeDataProcessing);
-        
-        document.getElementById('home-structure-debug-btn').addEventListener('click', debugDataStructure);
         
         // Event listeners สำหรับ controls All Register
         document.getElementById('all-register-search-input').addEventListener('input', filterAllRegisterData);
