@@ -497,16 +497,9 @@
                 <!-- Table Controls -->
                 <div class="table-controls">
                     <div>
-                        แสดง 
-                        <select id="home-rows-per-page">
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                            <option value="500">500</option>
-                        </select>
-                        แถวต่อหน้า | รวม <span id="home-total-rows">0</span> รายการ
+                        รวม <span id="home-total-rows">0</span> รายการ
                     </div>
-                    <div class="pagination" id="home-pagination">
+                    <div class="pagination" id="home-pagination" style="display: none;">
                         <!-- Pagination buttons will be generated here -->
                     </div>
                 </div>
@@ -1040,9 +1033,9 @@
     // ฟังก์ชันแสดงตารางหน้าหลัก
     function displayHomeTable() {
         const container = document.getElementById('home-table-container');
-        const startIndex = (currentHomePage - 1) * homeRowsPerPage;
-        const endIndex = startIndex + homeRowsPerPage;
-        const pageData = filteredHomeData.slice(startIndex, endIndex);
+        // const startIndex = (currentHomePage - 1) * homeRowsPerPage; // ไม่ใช้การแบ่งหน้าแล้ว
+        // const endIndex = startIndex + homeRowsPerPage; // ไม่ใช้การแบ่งหน้าแล้ว
+        const pageData = filteredHomeData; // แสดงข้อมูลทั้งหมดที่ผ่านการกรอง
         
         if (pageData.length === 0) {
             container.innerHTML = '<div class="error">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</div>';
@@ -1071,7 +1064,7 @@
         // Body
         html += '<tbody>';
         pageData.forEach((row, index) => {
-            const rowNumber = startIndex + index + 1;
+            const rowNumber = index + 1; // แก้เลขลำดับให้นับจาก 1
             html += '<tr>';
             
             // เลขที่แถว
@@ -3069,12 +3062,14 @@
         document.getElementById('home-province-filter').addEventListener('change', filterHomeData);
         document.getElementById('home-group-filter').addEventListener('change', filterHomeData);
         
+        /* ไม่ใช้การแบ่งหน้าแล้ว
         document.getElementById('home-rows-per-page').addEventListener('change', function() {
             homeRowsPerPage = parseInt(this.value);
             currentHomePage = 1;
             displayHomeTable();
             updateHomePagination();
         });
+        */
         
         document.getElementById('home-refresh-btn').addEventListener('click', function() {
             console.log('🔄 รีเฟรชข้อมูลหน้าหลัก');
