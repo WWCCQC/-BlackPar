@@ -831,32 +831,23 @@
                 throw new Error('ไม่พบข้อมูล sheets');
             }
             
-            // ค้นหา sheet ที่ชื่อ "BlackByGroupCode"
+            // ค้นหา sheet ที่ชื่อ "BlackByGroupCode" โดยเฉพาะ
             let targetSheet = null;
-            let sheetIndex = -1;
-            
-            for (let i = 0; i < json.sheets.length; i++) {
-                const sheet = json.sheets[i];
-                if (sheet.properties && sheet.properties.title === 'BlackByGroupCode') {
+            for (const sheet of json.sheets) {
+                if (sheet.properties && sheet.properties.title && sheet.properties.title.trim().toLowerCase() === 'blackbygroupcode') {
                     targetSheet = sheet;
-                    sheetIndex = i;
-                    console.log(`✅ พบ sheet "BlackByGroupCode" ที่ตำแหน่ง ${i}`);
+                    console.log(`✅ พบ sheet "BlackByGroupCode" (ตรวจสอบแบบ case-insensitive)`);
                     break;
                 }
             }
             
-            // หากไม่พบ sheet ที่ชื่อ "BlackByGroupCode" ให้ใช้ sheet แรก
+            // หากไม่พบ sheet ที่ต้องการ ให้โยน Error
             if (!targetSheet) {
-                console.warn('⚠️ ไม่พบ sheet "BlackByGroupCode" ใช้ sheet แรกแทน');
-                targetSheet = json.sheets[0];
-                sheetIndex = 0;
-                
-                // แสดงรายชื่อ sheet ทั้งหมดที่มี
-                console.log('📋 Sheet ทั้งหมดที่พบ:');
-                json.sheets.forEach((sheet, index) => {
-                    const sheetName = sheet.properties?.title || `Sheet ${index + 1}`;
-                    console.log(`  ${index}: ${sheetName}`);
-                });
+                console.error('❌ ไม่พบ sheet ที่ชื่อ "BlackByGroupCode" ในข้อมูลที่ได้รับจาก API');
+                // แสดงรายชื่อ sheet ทั้งหมดที่มีเพื่อการดีบัก
+                const availableSheets = json.sheets.map(s => `"${s.properties?.title || 'Untitled'}"`).join(', ');
+                console.log(`📋 Sheet ทั้งหมดที่พบ: ${availableSheets}`);
+                throw new Error(`ไม่พบชีต "BlackByGroupCode" | ชีตที่มีในระบบคือ: [${availableSheets}]`);
             }
             
             if (!targetSheet.data || !targetSheet.data[0] || !targetSheet.data[0].rowData) {
@@ -1285,13 +1276,13 @@
             document.getElementById('home-table-container').innerHTML = `
                 <div class="error">
                     <h3>⚠️ โหลดข้อมูลจาก sheet "BlackByGroupCode" ไม่ได้</h3>
-                    <p><strong>สาเหตุ:</strong> ${error.message}</p>
+                    <p><strong>สาเหตุ:</strong> ${error.message.split('|')[0]}</p>
+                    ${error.message.includes('|') ? `<p style="color: #c0392b; font-weight: bold; margin-top: 10px;"><strong>ชีตที่พบ:</strong> ${error.message.split('|')[1]}</p>` : ''}
                     <p><strong>แนะนำ:</strong></p>
                     <ul style="text-align: left; margin: 10px 0;">
+                        <li>ตรวจสอบว่าชื่อชีตใน Google Sheet ถูกต้องหรือไม่</li>
                         <li>ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต</li>
-                        <li>ตรวจสอบว่า API server สามารถเข้าถึงได้</li>
                         <li>ลองรีเฟรชข้อมูลอีกครั้งในภายหลัง</li>
-                        <li>หาก API อยู่บน Render.com อาจต้องรอ 1-2 นาทีให้ตื่น</li>
                     </ul>
                 </div>
             `;
@@ -1323,16 +1314,29 @@
             
             const json = await response.json();
             
-            if (!json.sheets || !json.sheets[0] || !json.sheets[0].data || !json.sheets[0].data[0] || !json.sheets[0].data[0].rowData) {
-                throw new Error('โครงสร้างข้อมูลไม่ถูกต้อง');
+            // ค้นหา sheet ที่ชื่อ "Remain Par By Group Code"
+            let targetSheet = null;
+            for (const sheet of json.sheets) {
+                if (sheet.properties && sheet.properties.title && sheet.properties.title.trim().toLowerCase() === 'remain par by group code') {
+                    targetSheet = sheet;
+                    console.log('✅ พบ sheet "Remain Par By Group Code" (ตรวจสอบแบบ case-insensitive)');
+                    break;
+                }
             }
-    
-    // ดึงข้อมูล JSON จาก Flask API (fallback สำหรับโค้ดเดิม)
-    // fetch('https://blackpar.onrender.com/sheet-data')
-    //     .then(res => res.json())
-    //     .then(json => {
-            // ไปยังตำแหน่ง rowData
-            const rowData = json.sheets[0].data[0].rowData;
+
+            // หากไม่พบ sheet ที่ต้องการ ให้โยน Error
+            if (!targetSheet) {
+                console.error('❌ ไม่พบ sheet "Remain Par By Group Code"');
+                const availableSheets = json.sheets.map(s => `"${s.properties?.title || 'Untitled'}"`).join(', ');
+                console.log(`📋 Sheet ทั้งหมดที่พบ: ${availableSheets}`);
+                throw new Error(`ไม่พบชีต "Remain Par By Group Code" | ชีตที่มีในระบบคือ: [${availableSheets}]`);
+            }
+
+            if (!targetSheet.data || !targetSheet.data[0] || !targetSheet.data[0].rowData) {
+                throw new Error('โครงสร้างข้อมูลไม่ถูกต้อง หรือไม่พบข้อมูลใน sheet');
+            }
+
+            const rowData = targetSheet.data[0].rowData;
             let html = '<div style="height: 100%; overflow: auto;"><table>';
             let headerHtml = '<thead>';
             let bodyHtml = '<tbody>';
@@ -1431,13 +1435,13 @@
             document.getElementById('table-container').innerHTML = `
                 <div class="error">
                     <h3>⚠️ โหลดข้อมูล Remain Par By Group Code ไม่ได้</h3>
-                    <p><strong>สาเหตุ:</strong> ${error.message}</p>
+                    <p><strong>สาเหตุ:</strong> ${error.message.split('|')[0]}</p>
+                    ${error.message.includes('|') ? `<p style="color: #c0392b; font-weight: bold; margin-top: 10px;"><strong>ชีตที่พบ:</strong> ${error.message.split('|')[1]}</p>` : ''}
                     <p><strong>แนะนำ:</strong></p>
                     <ul style="text-align: left; margin: 10px 0;">
+                        <li>ตรวจสอบว่าชื่อชีตใน Google Sheet ถูกต้องหรือไม่</li>
                         <li>ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต</li>
                         <li>ลองคลิกที่เมนูนี้อีกครั้งใน 1-2 นาที</li>
-                        <li>หาก API อยู่บน Render.com อาจต้องรอให้ตื่นจากโหมด Sleep</li>
-                        <li>ตรวจสอบ Console ของเบราว์เซอร์เพื่อดูรายละเอียดเพิ่มเติม</li>
                     </ul>
                 </div>
             `;
