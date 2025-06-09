@@ -2,6 +2,7 @@ from flask import Flask, jsonify, send_file
 from flask_cors import CORS
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -13,7 +14,7 @@ def home():
 @app.route('/sheet-data')
 def sheet_data():
     SERVICE_ACCOUNT_FILE = '/etc/secrets/service-account.json'
-    SPREADSHEET_ID = '1zNBBwHesBSFBNejaH4uTGqD90I4snSMxTcxODSQdGiE'
+    SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID')
     RANGES = [
         'Remain Par By Group Code!A1:U405',
         'BlackByGroupCode!A1:U405'
