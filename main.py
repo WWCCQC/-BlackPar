@@ -27,7 +27,7 @@ def sheet_data():
     result = service.spreadsheets().get(
         spreadsheetId=SPREADSHEET_ID,
         ranges=RANGES,
-        fields='sheets.data.rowData.values.formattedValue,sheets.data.rowData.values.effectiveFormat'
+        fields='sheets.properties.title,sheets.data.rowData.values.formattedValue,sheets.data.rowData.values.effectiveFormat'
     ).execute()
     return jsonify(result)
 
